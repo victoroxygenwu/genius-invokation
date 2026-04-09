@@ -426,23 +426,40 @@ class PrimaryMethodsImpl<Meta extends HeterogeneousMetaBase> {
 type PrimaryMethodRestrictionConfig = {
   my: { who: "my" };
   opp: { who: "opp" };
+
   character: { type: "character"; areaType: "characters" };
+  vCharacter: {
+    type: "character" | EntityOnCharacterReq["type"];
+    areaType: "characters";
+  };
+
+  combatStatus: { type: "combatStatus"; areaType: "combatStatuses" };
+  summon: { type: "summon"; areaType: "summons" };
+  support: { type: "support"; areaType: "supports" | "hands" | "pile" };
+
+  hand: { type: HandsOrPileEntityType; areaType: "hands" };
+  vHand: { type: HandsOrPileEntityType | "attachment"; areaType: "hands" };
+
+  pile: { type: HandsOrPileEntityType; areaType: "pile" };
+  vPile: { type: HandsOrPileEntityType | "attachment"; areaType: "pile" };
+
   equipment: { type: "equipment"; areaType: "characters" | "hands" | "pile" };
   typeEquipment: {
     type: "equipment";
     areaType: "characters" | "hands" | "pile";
   };
+
   status: { type: "status"; areaType: "characters" };
   typeStatus: { type: "status"; areaType: "characters" };
-  combatStatus: { type: "combatStatus"; areaType: "combatStatuses" };
-  summon: { type: "summon"; areaType: "summons" };
-  support: { type: "support"; areaType: "supports" | "hands" | "pile" };
+
   eventCard: { type: "eventCard"; areaType: "hands" | "pile" };
   typeEventCard: { type: "eventCard"; areaType: "hands" | "pile" };
+
   active: { type: "character"; position: "active" };
   prev: { type: "character"; position: "prev" };
   next: { type: "character"; position: "next" };
   standby: { type: "character"; position: "standby" };
+
   onlyDefeated: { type: "character"; defeated: "only" };
   includesDefeated: { type: "character"; defeated: "includes" };
   // cost: {
