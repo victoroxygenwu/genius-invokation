@@ -555,7 +555,7 @@ export const FireAndWar = card(331806)
  * 行动阶段开始时：创建所记录的卡牌加入手牌。
  */
 export const MoonAndHomelandInEffect02 = combatStatus(303184)
-  .variable("cardDefId", 0, { visible: false })
+  .variable("cardDefId", 0, { visible: false, forceOverwrite: true })
   .once("actionPhase")
   .do((c) => {
     const cardDefId = c.getVariable("cardDefId") as CardHandle;
