@@ -19,8 +19,11 @@ export {
   Game,
   type DeckConfig,
   type CreateInitialStateConfig,
+  type GameOption,
+  type ErrorLevel,
   mergeGameConfigWithDefault,
 } from "./game";
+export { setAsyncContext } from "./async_context";
 export { type Player, type PlayerConfig } from "./player";
 export {
   type GameStateLogEntry,

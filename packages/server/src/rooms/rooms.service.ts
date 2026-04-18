@@ -37,6 +37,7 @@ import {
   CURRENT_VERSION,
   type Version,
   type GameState,
+  setAsyncContext,
 } from "@gi-tcg/core";
 import { dispatchRpc, type Deck } from "@gi-tcg/typings";
 import getData from "@gi-tcg/data";
@@ -71,7 +72,7 @@ import type {
 import { DecksService } from "../decks/decks.service";
 import { UsersService, type UserInfo } from "../users/users.service";
 import { GamesService } from "../games/games.service";
-import { redis, s3, semver } from "bun";
+import { inspect, redis, s3, semver } from "bun";
 
 interface RoomConfig extends Partial<GameConfig> {
   initTotalActionTime: number; // defaults 45
@@ -364,7 +365,11 @@ class Player implements PlayerIOWithError {
   }
 
   onError(e: GiTcgError) {
-    this.errorSseSource.next({ type: "error", message: e.message });
+    const message = inspect(e);
+    this.errorSseSource.next({
+      type: "error",
+      message,
+    });
   }
   onInitialized(who: 0 | 1, game: InternalGame, oppPlayer: Player) {
     this._who = who;
@@ -418,6 +423,8 @@ function sendDebugLog(name: string, message: any) {
       .catch(() => ({}));
   }
 }
+
+await setAsyncContext(true);
 
 class Room {
   public static readonly CORE_VERSION = CORE_VERSION;
@@ -535,7 +542,7 @@ class Room {
           player0.onError(e);
           player1.onError(e);
           sendDebugLog("gameErrorLog", {
-            em: e.message,
+            em: inspect(e),
             gv: this.config.gameVersion,
             ...serializeGameStateLog(this.stateLog),
           });
@@ -573,11 +580,10 @@ class Room {
   }
 
   getStateLog() {
-    const players = ([0, 1] as const)
-      .map((who) => {
-        const player = this.getPlayer(who)?.playerInfo;
-        return player && { who, id: player.id, name: player.name };
-      });
+    const players = ([0, 1] as const).map((who) => {
+      const player = this.getPlayer(who)?.playerInfo;
+      return player && { who, id: player.id, name: player.name };
+    });
     return {
       ...serializeGameStateLog(this.stateLog),
       gv: this.config.gameVersion,
@@ -929,8 +935,7 @@ export class RoomsService {
         const time = now.slice(11, 19).replaceAll(":", "");
         const s3Prefix = process.env.S3_PREFIX;
         const keyPrefix = s3Prefix ? `${s3Prefix}/` : "";
-        s3
-          .file(`${keyPrefix}logs/${date}/${time}-${room.id}.json`)
+        s3.file(`${keyPrefix}logs/${date}/${time}-${room.id}.json`)
           .write(gameData, { type: "application/json" })
           .catch((error) => {
             this.logger.warn(
