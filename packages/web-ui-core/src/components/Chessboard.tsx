@@ -1005,7 +1005,7 @@ function rerenderChildren(opt: {
   };
 }
 
-type SelectingItem =
+type SelectingItem = (
   | {
       type: "card";
       info: CardInfo;
@@ -1025,7 +1025,8 @@ type SelectingItem =
   | {
       type: "externalCard";
       info: number | PbEntityState;
-    };
+    }
+) & { showImage?: boolean };
 
 export function Chessboard(props: ChessboardProps) {
   const [localProps, elProps] = splitProps(props, [
@@ -1058,7 +1059,6 @@ export function Chessboard(props: ChessboardProps) {
 
   const { assetsManager, locale, t } = useUiContext();
   const { CardDataViewer, ...dataViewerController } = createCardDataViewer({
-    includesImage: true,
     assetsManager,
     locale,
   });
@@ -1093,7 +1093,9 @@ export function Chessboard(props: ChessboardProps) {
     if (item === null) {
       dataViewerController.hide();
     } else if (item.type === "card") {
-      dataViewerController.showState("card", item.info.data);
+      dataViewerController.showState("card", item.info.data, {
+        includesImage: item.showImage,
+      });
     } else if (item.type === "character") {
       dataViewerController.showState(
         "character",
@@ -1101,14 +1103,18 @@ export function Chessboard(props: ChessboardProps) {
         item.info.combatStatus.map((x) => x.data),
       );
     } else if (item.type === "entity") {
-      dataViewerController.showState(item.info.type, item.info.data);
+      dataViewerController.showState("entity", item.info.data);
     } else if (item.type === "skill") {
       dataViewerController.showSkill(item.info.id);
     } else if (item.type === "externalCard") {
       if (typeof item.info === "number") {
-        dataViewerController.showCard(item.info);
+        dataViewerController.showCard(item.info, {
+          includesImage: item.showImage,
+        });
       } else {
-        dataViewerController.showState("card", item.info);
+        dataViewerController.showState("card", item.info, {
+          includesImage: item.showImage,
+        });
       }
     }
   });
@@ -1489,7 +1495,7 @@ export function Chessboard(props: ChessboardProps) {
           return c.filter((_, i) => i !== index);
         }
       });
-      setSelectingItem({ type: "card", info: cardInfo });
+      setSelectingItem({ type: "card", info: cardInfo, showImage: false });
     }
   };
 
@@ -1749,7 +1755,7 @@ export function Chessboard(props: ChessboardProps) {
   };
 
   const onMiniViewCardClick = (card: number | PbEntityState) => {
-    setSelectingItem({ type: "externalCard", info: card });
+    setSelectingItem({ type: "externalCard", info: card, showImage: true });
     setFocusingHands(false);
     setShowCardHint("myHand", null);
     setOppFocusingHands(false);
@@ -1997,7 +2003,11 @@ export function Chessboard(props: ChessboardProps) {
             shown={specialViewVisible()}
             candidateIds={localProps.selectCardCandidates}
             onClickCard={(id) => {
-              setSelectingItem({ type: "externalCard", info: id });
+              setSelectingItem({
+                type: "externalCard",
+                info: id,
+                showImage: false,
+              });
             }}
             onConfirm={(id) => {
               localProps.onSelectCard?.(id);
@@ -2066,7 +2076,10 @@ export function Chessboard(props: ChessboardProps) {
               showOppView={hasOppSpecialView()}
             />
           </Show>
-          <div class="mx-2 my-13 pointer-events-none contain-strict touch-pan card-data-viewer">
+          <div
+            class="mx-2 my-13 pointer-events-none contain-strict touch-pan"
+            data-dark
+          >
             <CardDataViewer />
           </div>
           {/* 右上角部件 */}
