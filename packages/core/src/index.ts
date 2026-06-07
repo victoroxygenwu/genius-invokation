@@ -35,7 +35,7 @@ export {
 export type * from "./base/state";
 export { StateSymbol, getVersionBehavior } from "./base/state";
 export { type Mutation } from "./base/mutation";
-export { type CommonSkillType } from "./base/skill";
+export { type CommonSkillType, type ActionInfo } from "./base/skill";
 export {
   type Version,
   type VersionInfo,
@@ -58,6 +58,14 @@ export {
 export * from "./error";
 export { getEntityById, getEntityArea, playSkillOfCard } from "./utils";
 export * from "@gi-tcg/typings";
+export {
+  AchievementTracker,
+  AchievementBuilder,
+  achievement,
+  type AchievementDefinition,
+  type AchievementCheckFn,
+  type AchievementPersistence,
+} from "./achievement_tracker";
 
 import type {
   ExEntityType,

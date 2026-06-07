@@ -233,4 +233,8 @@ export default {
   skill: {
     notYourTurn: "It is not your turn",
   },
+  achievement: {
+    unlocked: "Achievement Unlocked!",
+    score: "+{{score}} pts",
+  },
 } satisfies I18nRawDictionary;

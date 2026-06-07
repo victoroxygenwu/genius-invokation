@@ -927,6 +927,9 @@ export function updateHistory(
           });
           break;
         }
+        case "achievementUnlocked": {
+          break;
+        }
         case "switchTurn":
         case "setWinner": {
           break;

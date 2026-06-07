@@ -154,6 +154,7 @@ export function createClient(who: 0 | 1, option: ClientOption = {}): Client {
     triggeringEntities: [],
     damages: [],
     notificationBox: null,
+    achievements: [],
   });
   const [actionState, setActionState] = createSignal<ActionState | null>(null);
   const [doingRpc, setDoingRpc] = createSignal(false);

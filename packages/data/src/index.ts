@@ -208,3 +208,4 @@ import "./old_versions/v6.5.0";
 
 export * from "./end";
 export { default } from "./end";
+export { ACHIEVEMENTS } from "./achievements/index";

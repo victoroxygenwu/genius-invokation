@@ -19,6 +19,7 @@ export { card } from "./card";
 export { summon, status, combatStatus } from "./entity";
 export { attachment } from "./attachment";
 export { extension } from "./extension";
+export { achievement } from "../achievement_tracker";
 export {
   Registry,
   type GameData,

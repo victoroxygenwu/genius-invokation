@@ -40,3 +40,5 @@ export {
   AutoResizeText,
   type AutoResizeTextProps,
 } from "./components/AutoResizeText.tsx"
+export { LocalStorageAchievementPersistence } from "./achievement_persistence";
+export { type AchievementDisplayData } from "./components/AchievementToast";

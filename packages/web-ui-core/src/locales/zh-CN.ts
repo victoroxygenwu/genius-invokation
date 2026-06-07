@@ -271,4 +271,8 @@ export default {
   skill: {
     notYourTurn: "现在不是你的行动轮",
   },
+  achievement: {
+    unlocked: "成就解锁！",
+    score: "+{{score}} 分",
+  },
 };

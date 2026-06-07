@@ -98,6 +98,7 @@ import { createStore } from "solid-js/store";
 import { RoundAndPhaseNotification } from "./RoundAndPhaseNotification";
 import { PlayingCard } from "./PlayingCard";
 import { createCardDataViewer } from "@gi-tcg/card-data-viewer";
+import { createAchievementToast } from "./AchievementToast";
 import { useUiContext } from "../hooks/context";
 import { CardCountHint } from "./CardCountHint";
 import { Key } from "@solid-primitives/keyed";
@@ -1062,6 +1063,7 @@ export function Chessboard(props: ChessboardProps) {
     assetsManager,
     locale,
   });
+  const [achievementController, AchievementToast] = createAchievementToast();
   const [selectingItem, setSelectingItem] = createSignal<SelectingItem | null>(
     null,
   );
@@ -1786,6 +1788,19 @@ export function Chessboard(props: ChessboardProps) {
     }
   };
 
+  // 监听成就解锁事件
+  createEffect(on(
+    () => localProps.data.achievements,
+    (achs, prevAchs) => {
+      if (achs && achs.length > (prevAchs?.length ?? 0)) {
+        for (let i = prevAchs?.length ?? 0; i < achs.length; i++) {
+          achievementController.show(achs[i]);
+        }
+      }
+    },
+    { defer: true },
+  ));
+
   onMount(() => {
     setSpecialViewVisible(!localProps.spectatorMode);
     onResize();
@@ -2114,6 +2129,7 @@ export function Chessboard(props: ChessboardProps) {
         <TimerAlert timer={timer()} />
         <Alert />
         <MessageBox />
+        <AchievementToast />
         {/* game end */}
         <Show when={localProps.data.state.phase === PbPhaseType.GAME_END}>
           <div class="w-full h-full bg-black/85 flex items-center justify-center flex-col z-10">

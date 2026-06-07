@@ -108,6 +108,7 @@ import type { CharacterDefinition } from "./base/character";
 import { $, runQuery, toExpression, type QueryFn } from "./query";
 import type { IQuery } from "./query/utils";
 import { runWithAsyncContext } from "./async_context";
+import { AchievementTracker, type AchievementDefinition, type AchievementPersistence } from "./achievement_tracker";
 
 export interface DeckConfig extends Deck {
   noShuffle?: boolean;
@@ -222,6 +223,7 @@ export type ErrorLevel = "strict" | "toleratePreview" | "skipPhase";
 
 export interface GameOption {
   errorLevel: ErrorLevel;
+  achievementDefinitions?: readonly AchievementDefinition[];
 }
 
 const VOID_1_DICE_REQUIREMENT: DiceRequirement = new Map([[DiceType.Void, 1]]);
@@ -237,11 +239,18 @@ export class Game {
   private readonly mutator: StateMutator;
   private readonly mutatorConfig: MutatorConfig;
   readonly players: readonly [Player, Player];
+  // TODO: AchievementTracker 状态目前是 Game 实例的独立状态，不随 GameState 走。
+  // 如果未来需要确定性重放或 checkpoint 恢复，需要将 tracker 统计纳入 GameState。
+  private readonly achievementTracker: AchievementTracker;
+  private readonly achievementDefinitions: readonly AchievementDefinition[];
 
   public onPause: PauseHandler | null = null;
   public onIoError: IoErrorHandler | null = null;
 
-  constructor(initialState: GameState, option: Partial<GameOption> = {}) {
+  constructor(
+    initialState: GameState,
+    option: Partial<GameOption> = {},
+  ) {
     this.logger = new DetailLogger();
     this.option = {
       errorLevel: "strict",
@@ -258,8 +267,14 @@ export class Game {
     };
     this.mutator = new StateMutator(initialState, this.mutatorConfig);
     this.players = [new Player(), new Player()];
-    // this.initPlayerCards(0);
-    // this.initPlayerCards(1);
+    this.achievementTracker = new AchievementTracker();
+    this.achievementDefinitions = option.achievementDefinitions ?? [];
+    this.achievementTracker.prepareDefinitions(this.achievementDefinitions);
+  }
+
+  setAchievementPersistence(persistence: AchievementPersistence): void {
+    this.achievementTracker.setPersistence(persistence);
+    this.achievementTracker.loadPersistedAchievements();
   }
 
   static createInitialState(opt: CreateInitialStateConfig): GameState {
@@ -320,6 +335,21 @@ export class Game {
   mutate(mutation: Mutation) {
     if (!this._terminated) {
       this.mutator.mutate(mutation);
+      // Intercept damage/reaction mutations to update achievement tracker
+      switch (mutation.type) {
+        case "pushPhaseDamageLog": {
+          const event = mutation.damageEvent;
+          this.achievementTracker.recordDamage(
+            event.damageInfo.value,
+            event.damageInfo.causeDefeated,
+          );
+          break;
+        }
+        case "pushPhaseReactionLog": {
+          this.achievementTracker.recordReaction();
+          break;
+        }
+      }
     }
   }
 
@@ -470,6 +500,10 @@ export class Game {
           winner,
         });
       }
+      // 游戏结束时检查成就（如卡组构成+胜利类成就）
+      this.checkAndNotifyAchievements();
+      // 保存已解锁成就到持久化存储
+      await this.achievementTracker.saveAchievements();
       await this.mutator.notifyAndPause();
     }
     this.finishResolvers?.resolve(winner);
@@ -640,10 +674,43 @@ export class Game {
         });
         this.notifyOne(who);
         await this.mutator.reroll(who, count);
+
+        // 记录骰子投掷结果，逐个玩家检查骰子成就
+        this.achievementTracker.recordDiceRoll(this.state.players[who].dice);
+        this.checkAndNotifyAchievements(null, who);
+        this.achievementTracker.resetDiceStats();
       }),
     );
+
+    await this.mutator.notifyAndPause();
+
     return "action";
   }
+
+  /**
+   * 检查成就并通知前端
+   */
+  private checkAndNotifyAchievements(action: ActionInfo | null = null, who?: 0 | 1): void {
+    const newAchievements = this.achievementTracker.checkAchievements(
+      this.achievementDefinitions,
+      this.state,
+      action,
+    );
+    if (newAchievements.length > 0) {
+      this.mutate({
+        type: "achievementUnlocked",
+        who: who ?? (action?.who ?? this.state.currentTurn) as 0 | 1,
+        achievements: newAchievements.map((a) => ({
+          id: a.id,
+          score: a.score,
+          name: a.name,
+          description: a.description,
+          icon: a.icon,
+        })),
+      });
+    }
+  }
+
   private async actionPhase(prevPhase: PhaseType | null): Promise<PhaseType> {
     if (prevPhase === "roll") {
       await this.handleEvent("onActionPhase", new EventArg(this.state));
@@ -870,6 +937,13 @@ export class Game {
           "onAction",
           new ActionEventArg(this.state, actionInfo),
         );
+
+        // 检查成就（传入当前行动信息）
+        this.checkAndNotifyAchievements(actionInfo);
+
+        // 重置行动统计（在检查之后）
+        this.achievementTracker.resetActionStats();
+
         if (!actionInfo.fast) {
           this.mutate({
             type: "switchTurn",
@@ -922,6 +996,11 @@ export class Game {
     this.mutate({
       type: "clearRoundLogs",
     });
+
+    // 重置回合统计
+    this.achievementTracker.resetRoundStats();
+    this.achievementTracker.resetDiceStats();
+
     this.mutate({
       type: "stepRound",
     });

@@ -232,6 +232,20 @@ export interface ClearRemovedEntitiesM {
   readonly type: "clearRemovedEntities";
 }
 
+export interface AchievementRecord {
+  readonly id: number;
+  readonly score: number;
+  readonly name: string;
+  readonly description: string;
+  readonly icon?: string;
+}
+
+export interface AchievementUnlockedM {
+  readonly type: "achievementUnlocked";
+  readonly who: 0 | 1;
+  readonly achievements: readonly AchievementRecord[];
+}
+
 export type Mutation =
   | StepRandomM
   | StepIdM
@@ -258,7 +272,8 @@ export type Mutation =
   | ClearRemovedEntitiesM
   | PushPhaseDamageLogM
   | PushPhaseReactionLogM
-  | ClearPhaseLogsM;
+  | ClearPhaseLogsM
+  | AchievementUnlockedM;
 
 function createDraft<T extends { readonly id: number }>(
   sym: StateKind,
@@ -542,6 +557,10 @@ function doMutation(state: GameState, m: Mutation): GameState {
         draft.players[1].removedEntities = [];
       });
     }
+    case "achievementUnlocked": {
+      // 成就解锁不影响游戏状态，直接返回原状态
+      return state;
+    }
     case "pushPhaseDamageLog": {
       return produce(state, (draft) => {
         draft.players[m.damageEvent.sourceWho].phaseDamageLog.push(
@@ -649,6 +668,10 @@ export function stringifyMutation(m: Mutation): string | null {
       return `Mutate state of extension ${m.extensionId} to ${JSON.stringify(
         m.newState,
       )}`;
+    }
+    case "achievementUnlocked": {
+      const totalScore = m.achievements.reduce((sum, a) => sum + a.score, 0);
+      return `Unlock achievements: ${m.achievements.map(a => a.id).join(", ")} (score: ${totalScore})`;
     }
     default: {
       return null;

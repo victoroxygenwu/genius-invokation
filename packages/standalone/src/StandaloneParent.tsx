@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import getData from "@gi-tcg/data";
+import getData, { ACHIEVEMENTS } from "@gi-tcg/data";
 import {
   CancellablePlayerIO,
   DetailLogEntry,
@@ -198,7 +198,7 @@ export function StandaloneParent(props: StandaloneParentProps) {
       });
     }
     await setAsyncContext(true);
-    const game = new Game(state);
+    const game = new Game(state, { achievementDefinitions: ACHIEVEMENTS });
     (window as any).theGame = game;
     game.onPause = pause;
     game.players[0].io = childIo;

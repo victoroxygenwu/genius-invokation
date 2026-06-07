@@ -35,6 +35,7 @@ import type {
   ReactionInfo,
 } from "./components/Chessboard";
 import type { OppChessboardController } from "./opp";
+import type { AchievementDisplayData } from "./components/AchievementToast";
 
 export type CardDestination = `${"pile" | "hand"}${0 | 1}`;
 function getCardArea(
@@ -94,6 +95,7 @@ export interface ParsedMutation {
   enteringEntities: number[];
   triggeringEntities: number[];
   disposingEntities: number[];
+  achievements: AchievementDisplayData[];
 }
 
 export function parseMutations(
@@ -122,6 +124,7 @@ export function parseMutations(
   const enteringEntities: number[] = [];
   const triggeringEntities: number[] = [];
   const disposingEntities: number[] = [];
+  const achievements: ParsedMutation["achievements"] = [];
   const roundAndPhase: RoundAndPhaseNotificationInfo = {
     showRound: false,
     who: null,
@@ -370,6 +373,12 @@ export function parseMutations(
         }
         break;
       }
+      case "achievementUnlocked": {
+        if (mutation.value.achievements) {
+          achievements.push(...mutation.value.achievements);
+        }
+        break;
+      }
     }
   }
   return {
@@ -382,5 +391,6 @@ export function parseMutations(
     enteringEntities,
     triggeringEntities,
     disposingEntities,
+    achievements,
   };
 }

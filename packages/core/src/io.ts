@@ -424,6 +424,20 @@ export function exposeMutation(
         conversionTargetHint: m.conversionTargetHint as PbDiceType | undefined,
       };
     }
+    case "achievementUnlocked": {
+      // 只把成就通知发给触发者
+      if (m.who !== who) return null;
+      return {
+        $case: "achievementUnlocked",
+        achievements: m.achievements.map(a => ({
+          id: a.id,
+          score: a.score,
+          name: a.name,
+          description: a.description,
+          icon: a.icon ?? "",
+        })),
+      };
+    }
     default: {
       const _check: never = m;
       return null;
