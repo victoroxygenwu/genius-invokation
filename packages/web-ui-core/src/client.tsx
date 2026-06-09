@@ -113,6 +113,8 @@ export interface WebUiPlayerIO extends CancellablePlayerIO {
 export type Client = [
   io: WebUiPlayerIO,
   Chessboard: (props: ClientChessboardProps) => JSX.Element,
+  /** 当前棋盘数据（包含游戏状态、动画等） */
+  data: Accessor<ChessboardData>,
 ];
 
 export interface PlayerInfo {
@@ -409,5 +411,5 @@ export function createClient(who: 0 | 1, option: ClientOption = {}): Client {
     </UiContext.Provider>
   );
 
-  return [io, Wrapper];
+  return [io, Wrapper, data];
 }

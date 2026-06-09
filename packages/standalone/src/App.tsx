@@ -27,6 +27,7 @@ import {
 } from "@gi-tcg/core";
 import { StandaloneChild } from "./StandaloneChild";
 import { StandaloneParent } from "./StandaloneParent";
+import { PvEMode } from "./PvEMode";
 import { IS_BETA, SERVER_HOST, WEB_CLIENT_BASE_PATH } from "@gi-tcg/config";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import "@gi-tcg/deck-builder/style.css";
@@ -38,6 +39,7 @@ enum GameMode {
   NotStarted = 0,
   Standalone = 1,
   Editor = 2,
+  PvE = 3,
 }
 
 const INIT_DECK0 =
@@ -225,6 +227,7 @@ export function App() {
                   导入日志
                 </button>
                 <button onClick={() => setMode(GameMode.Editor)}>摆盘器</button>
+                <button onClick={() => setMode(GameMode.PvE)}>Roguelike PvE</button>
               </div>
             </div>
             <input
@@ -335,6 +338,9 @@ export function App() {
               返回首页
             </button>
           </GameStateEditor>
+        </Match>
+        <Match when={mode() === GameMode.PvE}>
+          <PvEMode onBack={() => setMode(GameMode.NotStarted)} />
         </Match>
       </Switch>
       <dialog ref={deckBuilderDialog!} class="deck-builder-dialog">

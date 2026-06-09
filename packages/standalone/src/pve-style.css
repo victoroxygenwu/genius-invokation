@@ -1,0 +1,1322 @@
+/* ============================================================
+   首页
+   ============================================================ */
+
+.pve-home {
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.pve-home-title {
+  font-size: 2.5rem;
+  color: #38bdf8;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.pve-home-subtitle {
+  color: #94a3b8;
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.pve-home-start {
+  font-size: 1.5rem;
+  padding: 1rem 3rem;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-home-start:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+}
+
+.pve-home-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 2rem 0;
+}
+
+/* ============================================================
+   测试面板
+   ============================================================ */
+
+.pve-debug-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: left;
+}
+
+.pve-debug-title {
+  text-align: center;
+  color: #f59e0b;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+}
+
+.pve-debug-section {
+  margin-bottom: 1.5rem;
+}
+
+.pve-debug-section h3 {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.pve-debug-char-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.pve-debug-char {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0.3rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 60px;
+}
+
+.pve-debug-char img {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.pve-debug-char span {
+  font-size: 0.55rem;
+  color: #94a3b8;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
+
+.pve-debug-char:hover {
+  border-color: #38bdf8;
+}
+
+.pve-debug-char-selected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.pve-debug-char-selected span {
+  color: #10b981;
+}
+
+.pve-debug-hint {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.pve-debug-input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  width: 120px;
+  text-align: center;
+}
+
+.pve-debug-enemy-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.pve-debug-enemy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 80px;
+}
+
+.pve-debug-enemy:hover {
+  border-color: #f59e0b;
+}
+
+.pve-debug-enemy-selected {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.pve-debug-enemy-type {
+  font-size: 1.5rem;
+}
+
+.pve-debug-enemy span:last-child {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+}
+
+.pve-debug-enemy-selected span:last-child {
+  color: #f59e0b;
+}
+
+.pve-debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.pve-debug-actions button {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  color: #38bdf8;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-debug-actions button:hover {
+  background: rgba(56, 189, 248, 0.25);
+}
+
+/* ============================================================
+   卡池查看器
+   ============================================================ */
+
+.pve-cardpool {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pve-cardpool h3 {
+  color: #94a3b8;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.pve-cardpool-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.pve-cardpool-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 70px;
+}
+
+.pve-cardpool-item img {
+  width: 55px;
+  height: 73px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.pve-cardpool-item span {
+  font-size: 0.55rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ============================================================
+   卡牌关联编辑器（可视化网格）
+   ============================================================ */
+
+.pve-weight-hint {
+  color: #64748b;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.pve-weight-main-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.pve-weight-main-info b {
+  color: #38bdf8;
+}
+
+.pve-weight-clear {
+  background: rgba(100, 116, 139, 0.3);
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  color: #94a3b8;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-clear:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+.pve-weight-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.pve-weight-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0.35rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 70px;
+  position: relative;
+}
+
+.pve-weight-card img {
+  width: 52px;
+  height: 69px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.pve-weight-card span {
+  font-size: 0.55rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+  text-align: center;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.pve-weight-card:hover {
+  border-color: #38bdf8;
+}
+
+/* 主体卡：蓝色高亮 */
+.pve-weight-card-main {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  transform: scale(1.08);
+}
+
+.pve-weight-card-main span {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+/* 已选关联卡：绿色高亮 */
+.pve-weight-card-selected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.pve-weight-card-selected span {
+  color: #10b981;
+}
+
+/* 权重角标 */
+.pve-weight-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #10b981;
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  border-radius: 10px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pve-weight-slider {
+  width: 140px;
+  accent-color: #10b981;
+}
+
+.pve-weight-slider-val {
+  font-size: 0.8rem;
+  color: #10b981;
+  font-weight: 600;
+  min-width: 28px;
+}
+
+.pve-weight-num-input {
+  width: 40px;
+  font-size: 0.75rem;
+  color: #10b981;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 4px;
+  padding: 0.15rem 0.25rem;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.pve-weight-num-input::-webkit-inner-spin-button,
+.pve-weight-num-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pve-weight-num-input:focus {
+  border-color: #10b981;
+  outline: none;
+}
+
+/* 导入/导出按钮 */
+.pve-weight-io-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.pve-weight-io-btn {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 6px;
+  color: #38bdf8;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-io-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.pve-weight-remove {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  border-radius: 4px;
+  color: #ef4444;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-remove:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* 顶部栏：主体卡信息 + 模式切换 */
+.pve-weight-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pve-weight-mode-bar {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pve-weight-mode-btn {
+  background: rgba(100, 116, 139, 0.15);
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #94a3b8;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-mode-btn:hover {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+.pve-weight-mode-active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.pve-weight-main-count {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* 工具栏 */
+.pve-weight-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.3rem;
+  padding: 0.3rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.pve-weight-toolbar-btn {
+  background: rgba(100, 116, 139, 0.15);
+  border: 1px solid #475569;
+  border-radius: 4px;
+  color: #94a3b8;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pve-weight-toolbar-btn:hover {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+/* 批量调节滑块 */
+.pve-weight-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 6px;
+  margin-bottom: 0.3rem;
+}
+
+.pve-weight-batch-label {
+  font-size: 0.7rem;
+  color: #38bdf8;
+  min-width: 90px;
+}
+
+.pve-weight-batch-accept {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10b981;
+  border-radius: 4px;
+  color: #10b981;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pve-weight-batch-accept:hover {
+  background: rgba(16, 185, 129, 0.4);
+}
+
+.pve-weight-batch-reject {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  border-radius: 4px;
+  color: #ef4444;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pve-weight-batch-reject:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* 关联列表 */
+.pve-weight-rel-list {
+  margin-top: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 0.3rem;
+}
+
+.pve-weight-rel-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.pve-weight-rel-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pve-weight-rel-selected {
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 2px solid #38bdf8;
+}
+
+.pve-weight-rel-check {
+  accent-color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.pve-weight-rel-img {
+  width: 28px;
+  height: 37px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pve-weight-rel-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.pve-weight-rel-name {
+  font-size: 0.75rem;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pve-weight-rel-reason {
+  font-size: 0.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 自动建议卡牌：虚线边框 + 蓝紫色 */
+.pve-weight-card-suggested {
+  border-color: rgba(139, 92, 246, 0.6);
+  border-style: dashed;
+}
+
+.pve-weight-badge-suggest {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: #8b5cf6;
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  border-radius: 10px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 自动分析建议面板 */
+.pve-weight-suggest-toggle {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.pve-weight-suggest-btn {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 6px;
+  color: #a78bfa;
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-suggest-btn:hover {
+  background: rgba(139, 92, 246, 0.25);
+}
+
+.pve-weight-suggestions {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+}
+
+.pve-weight-suggest-group {
+  margin-bottom: 0.75rem;
+}
+
+.pve-weight-suggest-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.pve-weight-suggest-category {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pve-weight-suggest-count {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.pve-weight-accept-all {
+  margin-left: auto;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 4px;
+  color: #10b981;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-accept-all:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.pve-weight-suggest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pve-weight-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.72rem;
+}
+
+.pve-weight-suggest-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pve-weight-suggest-names {
+  color: #e2e8f0;
+  min-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pve-weight-suggest-weight {
+  color: #a78bfa;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: center;
+}
+
+.pve-weight-suggest-reason {
+  color: #64748b;
+  font-size: 0.65rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pve-weight-accept {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+  border-radius: 4px;
+  color: #10b981;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-accept:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.pve-weight-dismiss {
+  background: rgba(100, 116, 139, 0.15);
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  color: #94a3b8;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-weight-dismiss:hover {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+.pve-weight-suggest-more {
+  color: #64748b;
+  font-size: 0.65rem;
+  text-align: center;
+  padding: 0.2rem;
+}
+
+/* ============================================================
+   PvE Roguelike 模式样式
+   ============================================================ */
+
+.pve-mode {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #e2e8f0;
+  padding: 2rem;
+}
+
+.pve-mode h2 {
+  color: #38bdf8;
+  margin-bottom: 1.5rem;
+}
+
+/* 角色选择 */
+.pve-character-select {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pve-hint {
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.pve-character-grid {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+}
+
+.pve-character-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  width: 140px;
+}
+
+.pve-character-card:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: #38bdf8;
+  transform: scale(1.05);
+}
+
+.pve-character-img {
+  width: 120px;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.pve-character-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.pve-character-element {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.pve-selected-count {
+  color: #94a3b8;
+  margin: 1rem 0;
+}
+
+/* 路径选择 */
+.pve-path-select {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pve-floor-info {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  color: #94a3b8;
+  margin-bottom: 1.5rem;
+}
+
+.pve-encounters {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.pve-encounter-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 200px;
+}
+
+.pve-encounter-card:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: #f59e0b;
+}
+
+.pve-encounter-type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #f59e0b;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.pve-encounter-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.pve-encounter-img {
+  width: 120px;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+/* 战斗 */
+.pve-battle {
+  width: 100%;
+  height: 100vh;
+}
+
+/* 奖励 */
+.pve-reward {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pve-reward-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* 商店 */
+.pve-shop {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+}
+
+/* 通关/失败 */
+.pve-victory,
+.pve-game-over {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 3rem 0;
+}
+
+.pve-victory h2 {
+  color: #10b981;
+  font-size: 2rem;
+}
+
+.pve-game-over h2 {
+  color: #ef4444;
+  font-size: 2rem;
+}
+
+/* 通用按钮 */
+.pve-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.pve-actions button,
+.pve-reward button,
+.pve-shop button {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  color: #38bdf8;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-actions button:hover,
+.pve-reward button:hover,
+.pve-shop button:hover {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+.pve-actions button:disabled,
+.pve-reward button:disabled,
+.pve-shop button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   Roguelike 独立入口样式
+   ============================================================ */
+
+.roguelike-app {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a, #1e293b, #312e81);
+}
+
+.roguelike-header {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem 2rem;
+  text-align: center;
+}
+
+.roguelike-header h1 {
+  color: #38bdf8;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   奖励网格（10 选 1）
+   ============================================================ */
+
+.pve-rewards-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+}
+
+.pve-reward-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  width: 140px;
+}
+
+.pve-reward-card:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: #10b981;
+}
+
+.pve-reward-card.selected {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  transform: scale(1.05);
+}
+
+.pve-card-img {
+  width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================================
+   商店增强
+   ============================================================ */
+
+.pve-shop-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.pve-shop-info {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.pve-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+  margin: 1.5rem auto;
+  max-width: 800px;
+}
+
+.pve-shop-item {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.pve-shop-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: #f59e0b;
+}
+
+.pve-shop-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pve-shop-item .pve-card-img {
+  width: 100px;
+  height: 133px;
+}
+
+.pve-item-name {
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.pve-item-cost {
+  color: #f59e0b;
+  font-size: 0.8rem;
+}
+
+/* ============================================================
+   卡组管理（删牌）
+   ============================================================ */
+
+.pve-deck-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pve-deck-section h3 {
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.pve-deck-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.pve-deck-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.35rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 80px;
+  text-align: center;
+}
+
+.pve-deck-item:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+.pve-deck-item-deleting {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: #ef4444;
+  transform: scale(0.95);
+}
+
+.pve-deck-img {
+  width: 60px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+}
+
+.pve-deck-name {
+  font-size: 0.6rem;
+  color: #e2e8f0;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.pve-deck-confirm {
+  font-size: 0.55rem;
+  color: #ef4444;
+  margin-top: 0.15rem;
+  font-weight: 600;
+}
+
+.pve-deck-cancel {
+  margin-top: 1rem;
+  background: rgba(100, 116, 139, 0.3);
+  border: 1px solid #64748b;
+  border-radius: 6px;
+  color: #94a3b8;
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-deck-cancel:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+.pve-floor-info {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.pve-encounter-reward {
+  font-size: 0.8rem;
+  color: #f59e0b;
+  margin-top: 0.5rem;
+}
+
+/* ============================================================
+   路线图
+   ============================================================ */
+
+.pve-path-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.pve-path-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+  min-width: 60px;
+  transition: all 0.2s;
+}
+
+.pve-path-node.current {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  transform: scale(1.1);
+}
+
+.pve-path-node.completed {
+  opacity: 0.5;
+}
+
+.pve-node-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.pve-node-type {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   战斗准备
+   ============================================================ */
+
+.pve-battle-ready {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 3rem 0;
+}
+
+.pve-battle-ready h2 {
+  margin-bottom: 1rem;
+}
+
+.pve-battle-ready p {
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  color: #f59e0b;
+}

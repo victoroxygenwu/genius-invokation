@@ -6,7 +6,9 @@
   "scripts": {
     "check": "tsc --noEmit",
     "dev": "vite",
+    "dev:roguelike": "vite --config vite.roguelike.config.ts",
     "build": "vite build",
+    "build:roguelike": "vite build --config vite.roguelike.config.ts",
     "preview": "vite preview"
   },
   "browserslist": "defaults",
@@ -17,6 +19,7 @@
     "@gi-tcg/data-code-analyzer": "workspace:*",
     "@gi-tcg/deck-builder": "workspace:*",
     "@gi-tcg/detail-log-viewer": "workspace:*",
+    "@gi-tcg/roguelike": "workspace:*",
     "@gi-tcg/state-editor": "workspace:*",
     "@gi-tcg/utils": "workspace:*",
     "@gi-tcg/web-ui-core": "workspace:*",

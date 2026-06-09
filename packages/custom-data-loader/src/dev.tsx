@@ -33,6 +33,7 @@ import { render, Dynamic } from "solid-js/web";
 import { AssetsManager } from "@gi-tcg/assets-manager";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import { Game } from "@gi-tcg/core";
+import { ACHIEVEMENTS } from "@gi-tcg/data";
 import { type Deck } from "@gi-tcg/typings";
 import { createClient } from "@gi-tcg/web-ui-core";
 
@@ -192,7 +193,7 @@ const MyCharacter = character("银狼")
       decks: [deck0(), deck1()],
     });
 
-    const gameInstance = new Game(initState);
+    const gameInstance = new Game(initState, { achievementDefinitions: ACHIEVEMENTS });
 
     const [io0, Chessboard0] = createClient(0, {
       assetsManager: () => assetsManager()!,
