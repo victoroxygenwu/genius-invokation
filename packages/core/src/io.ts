@@ -246,6 +246,11 @@ export function exposeMutation(
     case "clearPhaseLogs":
     case "resetVariables":
     case "switchActive": // We will manually handle this
+    case "updateAchievementStats":
+    case "unlockAchievement":
+    case "resetAchievementActionStats":
+    case "resetAchievementRoundStats":
+    case "resetAchievementDiceStats":
       return null;
     case "setPlayerFlag": {
       const FLAG_NAME_MAP: Partial<Record<PlayerFlag, PbPlayerFlag>> = {

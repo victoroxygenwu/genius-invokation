@@ -236,7 +236,7 @@ export class AchievementTracker {
         this.unlockedAchievements.add(id);
       }
     } catch (e) {
-      console.warn("Failed to load persisted achievements:", e);
+      console?.warn?.("Failed to load persisted achievements:", e);
     }
   }
 
@@ -248,7 +248,7 @@ export class AchievementTracker {
     try {
       await this.persistence.save(Array.from(this.unlockedAchievements));
     } catch (e) {
-      console.warn("Failed to save achievements:", e);
+      console?.warn?.("Failed to save achievements:", e);
     }
   }
 
@@ -323,7 +323,7 @@ export class AchievementTracker {
           newlyUnlocked.push(ach);
         }
       } catch (e) {
-        console.warn(`Achievement check failed for "${ach.name}" (id=${ach.id}):`, e);
+        console?.warn?.(`Achievement check failed for "${ach.name}" (id=${ach.id}):`, e);
       }
     }
 

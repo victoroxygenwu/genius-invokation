@@ -244,6 +244,7 @@ export class Game {
   // 如果未来需要确定性重放或 checkpoint 恢复，需要将 tracker 统计纳入 GameState。
   private readonly achievementTracker: AchievementTracker;
   private readonly achievementDefinitions: readonly AchievementDefinition[];
+  private _persistenceLoaded: Promise<void> = Promise.resolve();
 
   public onPause: PauseHandler | null = null;
   public onIoError: IoErrorHandler | null = null;
@@ -275,7 +276,15 @@ export class Game {
 
   setAchievementPersistence(persistence: AchievementPersistence): void {
     this.achievementTracker.setPersistence(persistence);
-    this.achievementTracker.loadPersistedAchievements();
+    // 同步加载，确保后续成就检查包含已解锁成就
+    this._persistenceLoaded = this.achievementTracker.loadPersistedAchievements().catch((e) => {
+      console?.warn?.("Failed to load persisted achievements:", e);
+    });
+  }
+
+  /** 等待持久化加载完成（用于需要确保加载完毕的场景） */
+  async waitForPersistenceLoaded(): Promise<void> {
+    await this._persistenceLoaded;
   }
 
   static createInitialState(opt: CreateInitialStateConfig): GameState {
@@ -338,17 +347,42 @@ export class Game {
     if (!this._terminated) {
       this.mutator.mutate(mutation);
       // Intercept damage/reaction mutations to update achievement tracker
+      // and sync stats to GameState via mutations for deterministic replay
       switch (mutation.type) {
         case "pushPhaseDamageLog": {
           const event = mutation.damageEvent;
-          this.achievementTracker.recordDamage(
-            event.damageInfo.value,
-            event.damageInfo.causeDefeated,
-          );
+          if (event.isDamageTypeHeal()) {
+            this.achievementTracker.recordHeal(event.damageInfo.value);
+            this.mutator.mutate({
+              type: "updateAchievementStats",
+              updates: {
+                skillMaxHeal: this.achievementTracker.skillMaxHeal,
+              },
+            });
+          } else {
+            this.achievementTracker.recordDamage(
+              event.damageInfo.value,
+              event.damageInfo.causeDefeated,
+            );
+            this.mutator.mutate({
+              type: "updateAchievementStats",
+              updates: {
+                actionDefeatCount: this.achievementTracker.actionDefeatCount,
+                skillMaxDamage: this.achievementTracker.skillMaxDamage,
+                roundDefeatCount: this.achievementTracker.roundDefeatCount,
+              },
+            });
+          }
           break;
         }
         case "pushPhaseReactionLog": {
           this.achievementTracker.recordReaction();
+          this.mutator.mutate({
+            type: "updateAchievementStats",
+            updates: {
+              roundReactionCount: this.achievementTracker.roundReactionCount,
+            },
+          });
           break;
         }
       }
@@ -429,6 +463,8 @@ export class Game {
       end: this.endPhase,
       gameEnd: async () => "gameEnd",
     };
+    // 确保持久化加载完成后再开始游戏，避免重复解锁
+    await this._persistenceLoaded;
     runWithAsyncContext(
       {
         gameLogger: this.logger,
@@ -504,7 +540,8 @@ export class Game {
       }
       // 游戏结束时检查成就（如卡组构成+胜利类成就）
       this.checkAndNotifyAchievements();
-      // 保存已解锁成就到持久化存储
+      // 确保持久化加载完成后再保存，避免覆盖已加载的数据
+      await this._persistenceLoaded;
       await this.achievementTracker.saveAchievements();
       await this.mutator.notifyAndPause();
     }
@@ -679,8 +716,15 @@ export class Game {
 
         // 记录骰子投掷结果，逐个玩家检查骰子成就
         this.achievementTracker.recordDiceRoll(this.state.players[who].dice);
+        this.mutator.mutate({
+          type: "updateAchievementStats",
+          updates: {
+            diceTypes: Array.from(this.achievementTracker.diceTypes),
+          },
+        });
         this.checkAndNotifyAchievements(null, who);
         this.achievementTracker.resetDiceStats();
+        this.mutator.mutate({ type: "resetAchievementDiceStats" });
       }),
     );
 
@@ -698,7 +742,16 @@ export class Game {
       this.state,
       action,
     );
+    for (const a of newAchievements) {
+      // 更新 GameState 中的解锁状态（用于确定性重放）
+      this.mutator.mutate({
+        type: "unlockAchievement",
+        achievementId: a.id,
+        score: a.score,
+      });
+    }
     if (newAchievements.length > 0) {
+      // 通知前端显示 toast
       this.mutate({
         type: "achievementUnlocked",
         who: who ?? (action?.who ?? this.state.currentTurn) as 0 | 1,
@@ -945,6 +998,7 @@ export class Game {
 
         // 重置行动统计（在检查之后）
         this.achievementTracker.resetActionStats();
+        this.mutator.mutate({ type: "resetAchievementActionStats" });
 
         if (!actionInfo.fast) {
           this.mutate({
@@ -1002,6 +1056,8 @@ export class Game {
     // 重置回合统计
     this.achievementTracker.resetRoundStats();
     this.achievementTracker.resetDiceStats();
+    this.mutator.mutate({ type: "resetAchievementRoundStats" });
+    this.mutator.mutate({ type: "resetAchievementDiceStats" });
 
     this.mutate({
       type: "stepRound",

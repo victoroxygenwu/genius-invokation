@@ -30,7 +30,7 @@ function isActionByCharacter(
   if (!action || action.type !== "useSkill") return false;
   const who = action.who;
   const activeChar = state.players[who].characters.find(
-    (c) => c.variables.active === 1,
+    (c) => c.id === state.players[who].activeCharacterId,
   );
   return activeChar?.definition.id === characterId;
 }

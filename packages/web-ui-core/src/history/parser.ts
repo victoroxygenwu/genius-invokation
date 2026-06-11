@@ -45,6 +45,7 @@ import {
 } from "@gi-tcg/typings";
 import type {
   AbsorbDiceHistoryChild,
+  ActionHistoryBlock,
   ConvertDiceHistoryChild,
   EnergyHistoryChild,
   GenerateDiceHistoryChild,
@@ -928,6 +929,10 @@ export function updateHistory(
           break;
         }
         case "achievementUnlocked": {
+          // 将成就数据附加到最近的详情块
+          if (mainBlock) {
+            (mainBlock as HistoryDetailBlock & { achievements?: readonly unknown[] }).achievements = m.achievements;
+          }
           break;
         }
         case "switchTurn":

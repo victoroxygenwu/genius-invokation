@@ -615,7 +615,7 @@ function doMutation(state: GameState, m: Mutation): GameState {
           tracker.roundReactionCount = m.updates.roundReactionCount;
         }
         if (m.updates.diceTypes !== undefined) {
-          tracker.diceTypes = m.updates.diceTypes;
+          tracker.diceTypes = [...m.updates.diceTypes];
         }
       });
     }

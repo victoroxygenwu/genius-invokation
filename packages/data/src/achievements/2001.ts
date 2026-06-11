@@ -52,6 +52,7 @@ export const ACH_2001 = achievement(2001)
   .score(10)
   .icon("🌍")
   .check((state) =>
-    hasAllEquipment(state, 0, ZHONGLI, [QIANYAN_LAOGU, GUANHONG_ZHISHA, CHUIJIN_ZHUANYU]),
+    hasAllEquipment(state, 0, ZHONGLI, [QIANYAN_LAOGU, GUANHONG_ZHISHA, CHUIJIN_ZHUANYU]) ||
+    hasAllEquipment(state, 1, ZHONGLI, [QIANYAN_LAOGU, GUANHONG_ZHISHA, CHUIJIN_ZHUANYU]),
   )
   .done();

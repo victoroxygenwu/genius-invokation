@@ -86,6 +86,15 @@ export interface ActionHistoryBlock {
   type: "action";
   who: 0 | 1;
   actionType: "action" | "declareEnd";
+  achievements?: readonly AchievementRecord[];
+}
+
+export interface AchievementRecord {
+  readonly id: number;
+  readonly name: string;
+  readonly description: string;
+  readonly icon?: string;
+  readonly score: number;
 }
 
 // 继续结算

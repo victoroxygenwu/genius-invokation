@@ -29,9 +29,9 @@ export const ACH_2002 = achievement(2002)
   .score(8)
   .icon("🐉")
   .check((state) => {
-    if (state.winner !== 0) return false;
-    // 检查玩家 0 的角色列表
-    const charIds = state.players[0].characters.map((c) => c.definition.id);
+    if (state.winner === null) return false;
+    // 检查胜利方的角色列表
+    const charIds = state.players[state.winner].characters.map((c) => c.definition.id);
     return charIds.includes(ZHONGLI) && charIds.includes(RUOTUO_LONGWANG);
   })
   .done();
