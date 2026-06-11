@@ -8,7 +8,7 @@ import {
   pairKey,
   snapWeight,
 } from "../src/card-weights";
-import { rollCards } from "../src/encounters";
+import { rollCards } from "../src/card-pool";
 
 beforeEach(() => {
   clearAllWeights();

@@ -4,15 +4,13 @@ import {
   getRefreshCost,
   getDeleteCost,
   getInterest,
-  rollShopCards,
-  rollVictoryRewards,
-  generateInitialDeck,
-  generateCharacterCards,
   ENCOUNTER_CURRENCY,
   BOSS_PHASE_HP,
   SHOP_CARD_PRICE_MIN,
   SHOP_CARD_PRICE_MAX,
-} from "../src/encounters";
+} from "../src/economy";
+import { rollShopCards } from "../src/card-pool";
+import { generateInitialDeck, generateCharacterCards } from "../src/deck";
 
 // ============================================================
 // getEnemyHp
@@ -121,25 +119,6 @@ describe("rollShopCards", () => {
     const cards = rollShopCards(1000);
     // Pool is limited, should not crash
     expect(cards.length).toBeLessThanOrEqual(1000);
-  });
-});
-
-// ============================================================
-// rollVictoryRewards
-// ============================================================
-
-describe("rollVictoryRewards", () => {
-  test("returns requested number of rewards", () => {
-    const rewards = rollVictoryRewards(5);
-    expect(rewards).toHaveLength(5);
-  });
-
-  test("each reward has cardId and name", () => {
-    const rewards = rollVictoryRewards(3);
-    for (const reward of rewards) {
-      expect(reward).toHaveProperty("cardId");
-      expect(reward).toHaveProperty("name");
-    }
   });
 });
 

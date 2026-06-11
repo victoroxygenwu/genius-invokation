@@ -13,23 +13,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { Game, type GameData, type DeckConfig, type GameState, StateSymbol } from "@gi-tcg/core";
+import { Game, type GameData, type DeckConfig, type GameState } from "@gi-tcg/core";
 import { createSimpleAI } from "./ai";
-import {
-  generateInitialDeck,
-  generateCharacterCards,
-  getEnemyHp,
-  ROGUELIKE_CONFIG,
-  ENCOUNTER_CURRENCY,
-  getRefreshCost,
-  getDeleteCost,
-  getInterest,
-  rollShopCards,
-  rollCards,
-  rollCharacterChoices,
-  generateFloorPath,
-  generateCharacterPool,
-} from "./encounters";
+import { generateInitialDeck, generateCharacterCards } from "./deck";
+import { ROGUELIKE_CONFIG, MAX_TEAM_SIZE, CHARACTER_CHOICE_COUNT } from "./data";
+import { getEnemyHp, getEncounterCurrency, getRefreshCost, getDeleteCost, getInterest } from "./economy";
+import { rollShopCards, rollCards } from "./card-pool";
+import { rollCharacterChoices, generateCharacterPool } from "./character-pool";
+import { generateFloorPath, getEncounterCharacterIds, type EnemyPool } from "./floor-gen";
+import { resolveModifiers } from "./modifier-resolver";
+import { getEligibleEvents, selectEvent, applyEventEffects, renderEventText, getEffectDescription } from "./events";
 import type {
   RoguelikeRun,
   RoguelikeConfig,
@@ -39,20 +32,25 @@ import type {
   RunState,
   PathNode,
   CharacterPoolEntry,
+  EventDefinition,
 } from "./types";
 
 export class RoguelikeRunManager {
   private run: RoguelikeRun;
   private data: GameData;
   private config: RoguelikeConfig;
+  private enemyPool?: EnemyPool;
+  private cardCosts?: Record<number, number>;
   private onUpdate: ((run: RoguelikeRun) => void) | null = null;
   private pendingFirstCharacter: number | null = null;
   /** 缓存的角色池（data 不变，只需构建一次） */
   private characterPool: CharacterPoolEntry[] | undefined;
 
-  constructor(data: GameData, config: RoguelikeConfig = ROGUELIKE_CONFIG) {
+  constructor(data: GameData, config: RoguelikeConfig = ROGUELIKE_CONFIG, enemyPool?: EnemyPool, cardCosts?: Record<number, number>) {
     this.data = data;
     this.config = config;
+    this.enemyPool = enemyPool;
+    this.cardCosts = cardCosts;
     this.run = this.createInitialRun();
   }
 
@@ -87,7 +85,12 @@ export class RoguelikeRunManager {
       refreshCount: 0,
       deleteCount: 0,
       rewardItems: [],
-      availableCharacters: rollCharacterChoices(4, this.data, [], this.getCharacterPool()),
+      availableCharacters: rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, [], this.getCharacterPool()),
+      completedEventIds: [],
+      currentEvent: null,
+      nextEnemyHpModifier: 0,
+      characterHpModifiers: {},
+      skipNextNode: false,
     };
   }
 
@@ -115,7 +118,7 @@ export class RoguelikeRunManager {
 
   selectFirstCharacter(characterId: number): void {
     this.pendingFirstCharacter = characterId;
-    this.run.availableCharacters = rollCharacterChoices(4, this.data, [characterId], this.getCharacterPool());
+    this.run.availableCharacters = rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, [characterId], this.getCharacterPool());
     this.notify();
   }
 
@@ -128,10 +131,16 @@ export class RoguelikeRunManager {
 
     this.pendingFirstCharacter = null;
     this.run.floor = 1;
-    this.run.floorSkipCharSelection = this.config.floors[0]?.skipCharacterSelection ?? false;
-    this.run.path = generateFloorPath(this.config.floors[0].path);
+    this.run.floorSkipCharSelection = false;
+    this.run.path = this.generatePath(0);
     this.run.currentNodeIndex = 0;
     this.processCurrentNode();
+  }
+
+  /** 根据楼层索引生成路径（带 encounter 配置） */
+  private generatePath(floorIndex: number): PathNode[] {
+    const fc = this.config.floors[floorIndex];
+    return generateFloorPath(fc.path, fc.encounters, this.enemyPool);
   }
 
   // ============================================================
@@ -139,18 +148,18 @@ export class RoguelikeRunManager {
   // ============================================================
 
   getAvailableCharactersForAdd(): typeof this.run.availableCharacters {
-    return rollCharacterChoices(4, this.data, this.run.characters, this.getCharacterPool());
+    return rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, this.run.characters, this.getCharacterPool());
   }
 
   addCharacter(characterId: number): void {
-    if (this.run.characters.length >= 4) return;
+    if (this.run.characters.length >= MAX_TEAM_SIZE) return;
     this.run.characters = [...this.run.characters, characterId];
 
     const char = this.data.characters.get(characterId);
     const tags = char?.tags.map(String) ?? [];
     this.run.deck = [...this.run.deck, ...generateCharacterCards(tags)];
 
-    this.run.path = generateFloorPath(this.config.floors[this.run.floor - 1].path);
+    this.run.path = this.generatePath(this.run.floor - 1);
     this.run.currentNodeIndex = 0;
     this.processCurrentNode();
   }
@@ -164,11 +173,10 @@ export class RoguelikeRunManager {
     if (!node) {
       if (this.run.floor < this.run.maxFloors) {
         this.run.floor++;
-        const nextFloorConfig = this.config.floors[this.run.floor - 1];
-        this.run.floorSkipCharSelection = nextFloorConfig?.skipCharacterSelection ?? false;
+        // 满 4 人后自动跳过角色选择
+        this.run.floorSkipCharSelection = this.run.characters.length >= MAX_TEAM_SIZE;
         if (this.run.floorSkipCharSelection) {
-          // 隐藏层：跳过角色选择，直接生成路径并开始
-          this.run.path = generateFloorPath(nextFloorConfig.path);
+          this.run.path = this.generatePath(this.run.floor - 1);
           this.run.currentNodeIndex = 0;
           this.processCurrentNode();
           return;
@@ -183,9 +191,12 @@ export class RoguelikeRunManager {
 
     switch (node.type) {
       case "shop":
-        this.run.shopItems = rollShopCards(this.config.shopCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deckCards: this.run.deck });
+        this.run.shopItems = rollShopCards(this.config.shopCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deck: this.run.deck, cardCosts: this.cardCosts });
         this.run.refreshCount = 0;
         this.setState("shop");
+        break;
+      case "event":
+        this.resolveEvent();
         break;
       default:
         this.setState("encounterSelect");
@@ -195,6 +206,61 @@ export class RoguelikeRunManager {
 
   private getCurrentNode(): PathNode | null {
     return this.run.path[this.run.currentNodeIndex] ?? null;
+  }
+
+  // ============================================================
+  // 事件系统
+  // ============================================================
+
+  /** 评估并选择一个事件 */
+  private resolveEvent(): void {
+    const events = this.config.events ?? [];
+    const eligible = getEligibleEvents(events, this.run, this.data);
+    const selected = selectEvent(eligible);
+    if (selected) {
+      this.run.currentEvent = selected;
+      this.setState("event");
+    } else {
+      // 没有满足条件的事件，直接跳过
+      this.run.currentNodeIndex++;
+      this.processCurrentNode();
+    }
+  }
+
+  /** 确认事件效果并继续 */
+  confirmEvent(): void {
+    const event = this.run.currentEvent;
+    if (!event) return;
+
+    // 记录已完成事件
+    this.run.completedEventIds = [...this.run.completedEventIds, event.id];
+
+    // 应用效果
+    applyEventEffects(event.effects, this.run, this.data);
+
+    const node = this.getCurrentNode();
+    if (node) node.completed = true;
+
+    this.run.currentEvent = null;
+
+    // 处理跳过下一个节点的效果
+    if (this.run.skipNextNode) {
+      this.run.skipNextNode = false;
+      this.run.currentNodeIndex += 2; // 跳过当前 + 下一个
+    } else {
+      this.run.currentNodeIndex++;
+    }
+    this.processCurrentNode();
+  }
+
+  /** 渲染事件文本（带变量替换） */
+  renderEventText(template: string): string {
+    return renderEventText(template, this.run, this.data);
+  }
+
+  /** 获取事件效果描述列表 */
+  getEventEffectDescriptions(event: EventDefinition): string[] {
+    return event.effects.map((e) => getEffectDescription(e, this.data));
   }
 
   getAvailableEncounters(): Encounter[] {
@@ -219,13 +285,15 @@ export class RoguelikeRunManager {
     if (!encounter) return;
 
     if (winner === 0) {
-      this.run.currency += ENCOUNTER_CURRENCY[encounter.type] ?? 0;
+      // 支持每敌人自定义货币奖励
+      const currencyReward = getEncounterCurrency(encounter);
+      this.run.currency += currencyReward;
       this.run.currency += getInterest(this.run.currency, this.config.interestThreshold, this.config.interestRate);
 
       const node = this.getCurrentNode();
       if (node) node.completed = true;
 
-      this.run.rewardItems = rollCards(this.config.rewardCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deckCards: this.run.deck });
+      this.run.rewardItems = rollCards(this.config.rewardCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deck: this.run.deck });
       this.setState("reward");
     } else {
       this.setState("gameOver");
@@ -239,8 +307,8 @@ export class RoguelikeRunManager {
       noShuffle: false,
     };
     const enemyDeck: DeckConfig = {
-      characters: encounter.script.characters,
-      cards: encounter.script.cards,
+      characters: getEncounterCharacterIds(encounter),
+      cards: [],
       noShuffle: true,
     };
 
@@ -259,27 +327,46 @@ export class RoguelikeRunManager {
   }
 
   private prepareEnemyState(state: GameState, encounter: Encounter): GameState {
-    const targetHp = getEnemyHp(this.run.floor, encounter.type);
-    // 天守阁场地牌：为 AI 提供 9 个万能骰
-    const TENSHUKAKU_ENTITY_ID = 321007;
-    const TENSHUKAKU_SUPPORT_ID = 88890;
-    const tenshukakuDef = this.data.entities.get(TENSHUKAKU_ENTITY_ID);
-
+    const configs = encounter.configs;
     const players = [...state.players] as any[];
+    const hpModifier = this.consumeNextEnemyHpModifier();
+
+    // 预解析所有 config 的 modifier（单次遍历）
+    const resolved = configs.map((config) => ({
+      config,
+      ...resolveModifiers(config.modifiers, config.characterId, this.data),
+    }));
+
+    // 为每个敌人角色应用对应的 config
     const enemyPlayer = {
       ...players[1],
-      characters: players[1].characters.map((char: any) => ({
-        ...char,
-        variables: { ...char.variables, health: targetHp, maxHealth: targetHp },
-      })),
-      supports: tenshukakuDef ? [{
-        [StateSymbol]: "entity",
-        id: TENSHUKAKU_SUPPORT_ID,
-        definition: tenshukakuDef,
-        variables: {},
-        attachments: [],
-      }] : [],
+      characters: players[1].characters.map((char: any) => {
+        const charId = char.definition?.id ?? char.id;
+        const match = resolved.find((r) => r.config.characterId === charId) ?? resolved[0];
+
+        const baseHp = match.config.hpOverride ?? getEnemyHp(this.run.floor, encounter.type);
+        const targetHp = Math.max(1, baseHp + hpModifier);
+
+        const newVars: any = {
+          ...char.variables,
+          health: targetHp,
+          maxHealth: targetHp,
+        };
+        if (match.hasFullEnergy) {
+          const energyVarName = (char.definition as any)?.specialEnergy?.variableName ?? "energy";
+          const maxEnergy = char.variables.maxEnergy ?? 2;
+          newVars[energyVarName] = maxEnergy;
+        }
+        return {
+          ...char,
+          variables: newVars,
+          entities: [...char.entities, ...match.statusEntities],
+        };
+      }),
+      supports: [...players[1].supports, ...resolved.flatMap((r) => r.supportEntities)],
+      hand: [...(players[1].hand ?? []), ...resolved.flatMap((r) => r.handCardIds)],
     };
+
     players[1] = enemyPlayer;
     return { ...state, players: players as unknown as typeof state.players };
   }
@@ -316,7 +403,7 @@ export class RoguelikeRunManager {
     if (this.run.currency < cost) return false;
     this.run.currency -= cost;
     this.run.refreshCount++;
-    this.run.shopItems = rollShopCards(this.config.shopCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deckCards: this.run.deck });
+    this.run.shopItems = rollShopCards(this.config.shopCardCount, { data: this.data, characterIds: this.run.characters, floor: this.run.floor, deck: this.run.deck, cardCosts: this.cardCosts });
     this.notify();
     return true;
   }
@@ -357,6 +444,18 @@ export class RoguelikeRunManager {
     this.notify();
   }
 
+  /** 获取当前运行中的事件 HP 修正 */
+  getCharacterHpModifier(characterId: number): number {
+    return this.run.characterHpModifiers[characterId] ?? 0;
+  }
+
+  /** 获取敌人 HP 修正值并重置 */
+  consumeNextEnemyHpModifier(): number {
+    const mod = this.run.nextEnemyHpModifier;
+    this.run.nextEnemyHpModifier = 0;
+    return mod;
+  }
+
   // ============================================================
   // 调试方法
   // ============================================================
@@ -374,9 +473,18 @@ export class RoguelikeRunManager {
     this.run.deck = generateInitialDeck(tagsList);
     this.run.currency = currency;
     this.run.floor = 1;
-    this.run.path = generateFloorPath(this.config.floors[0].path);
+    this.run.path = this.generatePath(0);
     this.run.currentNodeIndex = 0;
-    this.run.availableCharacters = rollCharacterChoices(4, this.data, characterIds, this.getCharacterPool());
+    this.run.availableCharacters = rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, characterIds, this.getCharacterPool());
     this.setState("encounterSelect");
+  }
+
+  /** 调试：直接应用一个事件的效果（用于事件测试面板） */
+  debugApplyEvent(event: EventDefinition): void {
+    applyEventEffects(event.effects, this.run, this.data);
+    if (!this.run.completedEventIds.includes(event.id)) {
+      this.run.completedEventIds = [...this.run.completedEventIds, event.id];
+    }
+    this.notify();
   }
 }

@@ -173,6 +173,30 @@ export const SharpenTheBlade = status(209)
   .done();
 
 /**
+ * @id 210
+ * @name 通用伤害增加
+ * @description
+ * 所附属角色造成的伤害+1。可用次数可叠加。
+ */
+export const GenericDamageBoost = status(210)
+  .on("increaseDamage")
+  .usageCanAppend(1, Infinity)
+  .increaseDamage(1)
+  .done();
+
+/**
+ * @id 211
+ * @name 通用伤害减免
+ * @description
+ * 所附属角色受到的伤害-1。可用次数可叠加。
+ */
+export const GenericDamageReduction = status(211)
+  .on("decreaseDamaged")
+  .usageCanAppend(1, Infinity)
+  .decreaseDamage(1)
+  .done();
+
+/**
  * @id 201
  * @name 费用增加
  * @description

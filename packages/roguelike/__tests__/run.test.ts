@@ -46,6 +46,7 @@ const TEST_CONFIG: RoguelikeConfig = {
   rewardCardCount: 5,
   interestThreshold: 50,
   interestRate: 10,
+  events: [],
 };
 
 // ============================================================

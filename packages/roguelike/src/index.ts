@@ -21,6 +21,9 @@ export type {
   EnemyScript,
   EncounterType,
   Encounter,
+  EnemyModifierType,
+  EnemyModifier,
+  EnemyConfig,
   Reward,
   RunState,
   NodeType,
@@ -30,35 +33,53 @@ export type {
   FloorConfig,
   RoguelikeConfig,
   CharacterPoolEntry,
+  EventConditionType,
+  EventCondition,
+  EventEffectType,
+  EventDefinition,
 } from "./types";
-export type { RollCardsOptions } from "./encounters";
-export { RoguelikeRunManager } from "./run";
 export {
   ROGUELIKE_CONFIG,
-  generateCharacterPool,
-  NORMAL_ENCOUNTERS,
-  ELITE_ENCOUNTERS,
-  BOSS_ENCOUNTERS,
-  generateInitialDeck,
-  generateCharacterCards,
-  generateCardPool,
-  getEnemyHp,
-  BOSS_PHASE_HP,
-  ENCOUNTER_CURRENCY,
-  getRefreshCost,
-  getDeleteCost,
-  getInterest,
-  rollShopCards,
-  rollCards,
-  rollCharacterChoices,
-  generateFloorPath,
-  getImageUrl,
-  FALLBACK_IMAGE,
-  getCardName,
-  SHOP_CARD_PRICE_MIN,
-  SHOP_CARD_PRICE_MAX,
-} from "./encounters";
+  MAX_TEAM_SIZE, CHARACTER_CHOICE_COUNT, SHOP_COST_GROWTH_RATE,
+  BASE_HP,
+} from "./data";
+export { generateCharacterPool, rollCharacterChoices } from "./character-pool";
+export { generateInitialDeck, generateCharacterCards } from "./deck";
+export { generateCardPool, rollCards, rollShopCards, validateCardIds, DEFAULT_SHOP_CARD_COST } from "./card-pool";
+export type { RollCardsOptions } from "./card-pool";
 export {
+  getEnemyHp, BOSS_PHASE_HP, ENCOUNTER_CURRENCY, getEncounterCurrency,
+  getRefreshCost, getDeleteCost, getInterest, SHOP_CARD_PRICE_MIN, SHOP_CARD_PRICE_MAX,
+} from "./economy";
+export { getImageUrl, FALLBACK_IMAGE, getCardName, sample, validateIds } from "./utils";
+export { enemyConfigToScript, createEncounter, generateFloorPath, getEncounterName, getEncounterCharacterIds } from "./floor-gen";
+export type { EnemyPool } from "./floor-gen";
+export { querySupportCards, queryFoodCards, queryArtifactCards } from "./card-queries";
+export type { CardEntry } from "./card-queries";
+export { RoguelikeRunManager } from "./run";
+export {
+  ALL_NORMAL_ENEMIES,
+  ALL_ELITE_ENEMIES,
+  ALL_BOSS_ENEMIES,
+  DEFAULT_ENEMY_POOL,
+  validateEnemyIds,
+} from "./enemies";
+export { KNOWN_STATUS_IDS, validateStatusIds } from "./enemy-modifiers";
+export { resolveModifier, resolveModifiers, makeEntityState } from "./modifier-resolver";
+export type { ModifierEffect } from "./modifier-resolver";
+export { DEFAULT_ENEMY_MODIFIERS, TENSHUKAKU_ENTITY_ID, DEFAULT_EVENTS } from "./data";
+export {
+  evaluateEventWeight,
+  getEligibleEvents,
+  selectEvent,
+  renderEventText,
+  applyEventEffects,
+  getEffectDescription,
+  getConditionDescription,
+} from "./events";
+export {
+  CardWeightManager,
+  defaultCardWeightManager,
   getCardWeight,
   getDirectCardWeight,
   setCardWeight,
@@ -72,6 +93,8 @@ export {
 } from "./card-weights";
 export type { CardWeightPair, CardWeightConfig } from "./card-weights";
 export {
+  CardRelationshipAnalyzer,
+  defaultCardRelationshipAnalyzer,
   analyzeRelationships,
   getAllCharacters,
 } from "./card-relationships";
