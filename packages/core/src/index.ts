@@ -67,6 +67,9 @@ export {
   type AchievementPersistence,
 } from "./achievement_tracker";
 
+export type { AchievementTrackerState } from "./base/achievement_state";
+export { createInitialAchievementTrackerState } from "./base/achievement_state";
+
 import type {
   ExEntityType,
   HandleT,

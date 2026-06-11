@@ -109,6 +109,7 @@ import { $, runQuery, toExpression, type QueryFn } from "./query";
 import type { IQuery } from "./query/utils";
 import { runWithAsyncContext } from "./async_context";
 import { AchievementTracker, type AchievementDefinition, type AchievementPersistence } from "./achievement_tracker";
+import { createInitialAchievementTrackerState } from "./base/achievement_state";
 
 export interface DeckConfig extends Deck {
   noShuffle?: boolean;
@@ -316,6 +317,7 @@ export class Game {
       roundNumber: 0,
       winner: null,
       extensions,
+      achievementTracker: createInitialAchievementTrackerState(),
     };
     return state;
   }

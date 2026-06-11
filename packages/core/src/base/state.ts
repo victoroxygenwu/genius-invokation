@@ -39,6 +39,7 @@ import { randomSeed } from "../random";
 import type { Version } from "..";
 import { versionLt } from "./version";
 import type { AttachmentDefinition } from "./attachment";
+import type { AchievementTrackerState } from "./achievement_state";
 
 // 为不同层级的 state object 添加 marker symbol
 export type StateKind =
@@ -139,6 +140,7 @@ export interface GameState {
   readonly winner: 0 | 1 | null;
   readonly players: readonly [PlayerState, PlayerState];
   readonly extensions: readonly ExtensionState[];
+  readonly achievementTracker: AchievementTrackerState;
 }
 
 export interface PlayerState {
@@ -233,3 +235,6 @@ export type {
   TriggeredSkillDefinition,
   AttachmentDefinition,
 };
+
+export type { AchievementTrackerState } from "./achievement_state";
+export { createInitialAchievementTrackerState } from "./achievement_state";

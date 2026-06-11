@@ -246,6 +246,36 @@ export interface AchievementUnlockedM {
   readonly achievements: readonly AchievementRecord[];
 }
 
+export interface UpdateAchievementStatsM {
+  readonly type: "updateAchievementStats";
+  readonly updates: {
+    readonly actionDefeatCount?: number;
+    readonly skillMaxDamage?: number;
+    readonly skillMaxHeal?: number;
+    readonly roundDefeatCount?: number;
+    readonly roundReactionCount?: number;
+    readonly diceTypes?: readonly number[];
+  };
+}
+
+export interface UnlockAchievementM {
+  readonly type: "unlockAchievement";
+  readonly achievementId: number;
+  readonly score: number;
+}
+
+export interface ResetAchievementActionStatsM {
+  readonly type: "resetAchievementActionStats";
+}
+
+export interface ResetAchievementRoundStatsM {
+  readonly type: "resetAchievementRoundStats";
+}
+
+export interface ResetAchievementDiceStatsM {
+  readonly type: "resetAchievementDiceStats";
+}
+
 export type Mutation =
   | StepRandomM
   | StepIdM
@@ -273,7 +303,12 @@ export type Mutation =
   | PushPhaseDamageLogM
   | PushPhaseReactionLogM
   | ClearPhaseLogsM
-  | AchievementUnlockedM;
+  | AchievementUnlockedM
+  | UpdateAchievementStatsM
+  | UnlockAchievementM
+  | ResetAchievementActionStatsM
+  | ResetAchievementRoundStatsM
+  | ResetAchievementDiceStatsM;
 
 function createDraft<T extends { readonly id: number }>(
   sym: StateKind,
@@ -561,6 +596,56 @@ function doMutation(state: GameState, m: Mutation): GameState {
       // 成就解锁不影响游戏状态，直接返回原状态
       return state;
     }
+    case "updateAchievementStats": {
+      return produce(state, (draft) => {
+        const tracker = draft.achievementTracker;
+        if (m.updates.actionDefeatCount !== undefined) {
+          tracker.actionDefeatCount = m.updates.actionDefeatCount;
+        }
+        if (m.updates.skillMaxDamage !== undefined) {
+          tracker.skillMaxDamage = m.updates.skillMaxDamage;
+        }
+        if (m.updates.skillMaxHeal !== undefined) {
+          tracker.skillMaxHeal = m.updates.skillMaxHeal;
+        }
+        if (m.updates.roundDefeatCount !== undefined) {
+          tracker.roundDefeatCount = m.updates.roundDefeatCount;
+        }
+        if (m.updates.roundReactionCount !== undefined) {
+          tracker.roundReactionCount = m.updates.roundReactionCount;
+        }
+        if (m.updates.diceTypes !== undefined) {
+          tracker.diceTypes = m.updates.diceTypes;
+        }
+      });
+    }
+    case "unlockAchievement": {
+      return produce(state, (draft) => {
+        const tracker = draft.achievementTracker;
+        if (!tracker.unlockedAchievements.includes(m.achievementId)) {
+          tracker.unlockedAchievements.push(m.achievementId);
+        }
+        tracker.totalScore += m.score;
+      });
+    }
+    case "resetAchievementActionStats": {
+      return produce(state, (draft) => {
+        draft.achievementTracker.actionDefeatCount = 0;
+        draft.achievementTracker.skillMaxDamage = 0;
+        draft.achievementTracker.skillMaxHeal = 0;
+      });
+    }
+    case "resetAchievementRoundStats": {
+      return produce(state, (draft) => {
+        draft.achievementTracker.roundDefeatCount = 0;
+        draft.achievementTracker.roundReactionCount = 0;
+      });
+    }
+    case "resetAchievementDiceStats": {
+      return produce(state, (draft) => {
+        draft.achievementTracker.diceTypes = [];
+      });
+    }
     case "pushPhaseDamageLog": {
       return produce(state, (draft) => {
         draft.players[m.damageEvent.sourceWho].phaseDamageLog.push(
@@ -672,6 +757,21 @@ export function stringifyMutation(m: Mutation): string | null {
     case "achievementUnlocked": {
       const totalScore = m.achievements.reduce((sum, a) => sum + a.score, 0);
       return `Unlock achievements: ${m.achievements.map(a => a.id).join(", ")} (score: ${totalScore})`;
+    }
+    case "updateAchievementStats": {
+      return `Update achievement stats: ${JSON.stringify(m.updates)}`;
+    }
+    case "unlockAchievement": {
+      return `Unlock achievement ${m.achievementId} (score: ${m.score})`;
+    }
+    case "resetAchievementActionStats": {
+      return `Reset achievement action stats`;
+    }
+    case "resetAchievementRoundStats": {
+      return `Reset achievement round stats`;
+    }
+    case "resetAchievementDiceStats": {
+      return `Reset achievement dice stats`;
     }
     default: {
       return null;
