@@ -1,0 +1,44 @@
+{
+  "normal": [
+    { "characterId": 2101, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2104, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2202, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2205, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2203, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2207, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2301, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2303, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2302, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2404, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2405, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2406, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2503, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2601, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2604, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2703, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2705, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] }
+  ],
+  "elite": [
+    { "characterId": 2103, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2201, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2206, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2304, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2306, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2401, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2402, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2403, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2501, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2603, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2605, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2701, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2704, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] }
+  ],
+  "boss": [
+    { "characterId": 2102, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2204, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2305, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2502, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2602, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 2702, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] }
+  ]
+}

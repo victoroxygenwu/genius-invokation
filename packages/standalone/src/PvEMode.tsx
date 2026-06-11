@@ -18,26 +18,28 @@ import { CURRENT_VERSION, setAsyncContext } from "@gi-tcg/core";
 import { createClient } from "@gi-tcg/web-ui-core";
 import "@gi-tcg/web-ui-core/style.css";
 import { PbPhaseType } from "@gi-tcg/typings";
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import {
   RoguelikeRunManager,
-  ENCOUNTER_CURRENCY,
-  getImageUrl,
-  FALLBACK_IMAGE,
+  getEncounterCurrency,
   getCardName,
   generateCharacterPool,
-  NORMAL_ENCOUNTERS,
-  ELITE_ENCOUNTERS,
-  BOSS_ENCOUNTERS,
-  generateCardPool,
-  analyzeRelationships,
+  getRefreshCost,
+  getDeleteCost,
+  getEncounterName,
+  getEncounterCharacterIds,
+  validateEnemyIds,
+  validateStatusIds,
+  validateCardIds,
+  getEffectDescription,
   type RoguelikeRun,
   type Encounter,
-  type NodeType,
-  type RunState,
   type CharacterPoolEntry,
+  type EventDefinition,
 } from "@gi-tcg/roguelike";
-import { CardWeightEditor } from "./CardWeightEditor";
+import { DebugPanel } from "./DebugPanel";
+import { getLevelConfig, getEnemyPool, getCardCosts, getEvents } from "./configStore";
+import { SafeImage } from "./SafeImage";
 import "./pve-style.css";
 
 // ============================================================
@@ -55,7 +57,7 @@ function CharacterGrid(props: {
       <For each={props.characters}>
         {(char) => (
           <button class="pve-character-card" onClick={() => props.onSelect(char.id)}>
-            <img class="pve-character-img" src={getImageUrl(char.id)} alt={char.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+            <SafeImage class="pve-character-img" entityId={char.id} alt={char.name} loading="lazy" />
             <div class="pve-character-name">{char.name}</div>
             <div class="pve-character-element">{char.element}</div>
           </button>
@@ -82,7 +84,7 @@ function ShopDeckSection(props: {
               class={`pve-deck-item ${props.deletingIndex === index() ? "pve-deck-item-deleting" : ""}`}
               onClick={() => props.onDelete(index())}
             >
-              <img class="pve-deck-img" src={getImageUrl(cardId)} alt={getCardName(cardId)} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+              <SafeImage class="pve-deck-img" entityId={cardId} alt={getCardName(cardId)} loading="lazy" />
               <div class="pve-deck-name">{getCardName(cardId)}</div>
               <Show when={props.deletingIndex === index()}>
                 <div class="pve-deck-confirm">再点确认删除</div>
@@ -98,26 +100,28 @@ function ShopDeckSection(props: {
   );
 }
 
-const NODE_ICON: Record<NodeType, string> = {
-  normal: "⚔️", elite: "💀", shop: "🏪", boss: "👹",
-};
+import { NODE_INFO } from "./nodeInfo";
 
 const data = getData(CURRENT_VERSION);
 const CHARACTER_POOL = generateCharacterPool(data).sort((a, b) => a.id - b.id);
 
-/** 所有可用敌人（用于测试选敌） */
-const ALL_ENCOUNTERS = [...NORMAL_ENCOUNTERS, ...ELITE_ENCOUNTERS, ...BOSS_ENCOUNTERS];
+// 启动时验证硬编码 ID 是否与 GameData 一致
+const _enemyWarnings = validateEnemyIds(data.characters);
+const _statusWarnings = validateStatusIds(data.entities);
+const _cardWarnings = validateCardIds(data.entities);
+if (_enemyWarnings.length > 0) console.warn("[Roguelike] Enemy ID validation:", _enemyWarnings);
+if (_statusWarnings.length > 0) console.warn("[Roguelike] Status ID validation:", _statusWarnings);
+if (_cardWarnings.length > 0) console.warn("[Roguelike] Card ID validation:", _cardWarnings);
 
 type DebugMode = "off" | "manual" | "autoWin";
-const DEBUG_INF_CURRENCY = 9999;
 
 export interface PvEModeProps {
   onBack?: () => void;
 }
 
 export function PvEMode(props: PvEModeProps) {
-  const [runManager] = createSignal(new RoguelikeRunManager(data));
-  const [run, setRun] = createSignal<RoguelikeRun>(runManager().getRun());
+  const [runManager, setRunManager] = createSignal<RoguelikeRunManager>(null!);
+  const [run, setRun] = createSignal<RoguelikeRun>(null!);
   const [selectedReward, setSelectedReward] = createSignal<number>(-1);
   const [inBattle, setInBattle] = createSignal(false);
   const [showDeck, setShowDeck] = createSignal(false);
@@ -126,10 +130,7 @@ export function PvEMode(props: PvEModeProps) {
   // 首页 / 游戏视图切换
   const [viewMode, setViewMode] = createSignal<"home" | "game">("home");
 
-  // 测试面板配置
-  const [testChars, setTestChars] = createSignal<number[]>([1101, 1503]);
-  const [testCurrency, setTestCurrency] = createSignal(100);
-  const [showCardPool, setShowCardPool] = createSignal(false);
+  // 调试模式（由 DebugPanel 设置，影响遭遇选择行为）
   const [debugMode, setDebugMode] = createSignal<DebugMode>("off");
 
   const [uiIo, Chessboard, boardData] = createClient(0);
@@ -141,7 +142,20 @@ export function PvEMode(props: PvEModeProps) {
     (phase) => { if (phase === PbPhaseType.GAME_END) setGameEndTrigger((n) => n + 1); },
   ));
 
-  runManager().setOnUpdate((newRun) => setRun(newRun));
+  /** 创建新 runManager 并注册 onUpdate 回调 */
+  function createRunManager() {
+    const levelCfg = getLevelConfig();
+    const events = getEvents();
+    // 合并事件到关卡配置（configStore 中的 events 优先于 levelConfig 中的）
+    const config = { ...levelCfg, events: events.length > 0 ? events : levelCfg.events };
+    const mgr = new RoguelikeRunManager(data, config, getEnemyPool(), getCardCosts());
+    mgr.setOnUpdate((newRun) => setRun(newRun));
+    setRunManager(mgr);
+    setRun(mgr.getRun());
+  }
+
+  // 初始注册 onUpdate
+  createRunManager();
 
   const [pendingFirst, setPendingFirst] = createSignal(false);
   const selectFirstCharacter = (id: number) => {
@@ -225,49 +239,14 @@ export function PvEMode(props: PvEModeProps) {
   // ============================================================
   // 首页导航
   // ============================================================
-  const goHome = () => { restart(); setViewMode("home"); setDebugMode("off"); };
-  const startGame = () => { restart(); setViewMode("game"); setDebugMode("off"); };
+  const goHome = () => { createRunManager(); setViewMode("home"); setDebugMode("off"); };
+  const startGame = () => { createRunManager(); setViewMode("game"); setDebugMode("off"); };
 
   // ============================================================
-  // 测试快捷入口
+  // 调试模式辅助
   // ============================================================
 
-  /** 初始化测试 run，返回角色数组（失败返回 null） */
-  function ensureDebugReady(currency = testCurrency()): number[] | null {
-    const chars = testChars();
-    if (chars.length < 2) { alert("至少选择 2 个角色"); return null; }
-    runManager().debugQuickStart(chars, currency);
-    return chars;
-  }
-
-  /** 进入测试模式（选敌人界面） */
-  function enterDebugBattle(autoWin: boolean) {
-    if (!ensureDebugReady()) return;
-    setDebugMode(autoWin ? "autoWin" : "manual");
-    setViewMode("game");
-  }
-
-  const testBattle = () => enterDebugBattle(false);
-  const testFullFlow = () => enterDebugBattle(true);
-
-  const testShop = () => {
-    if (!ensureDebugReady(DEBUG_INF_CURRENCY)) return;
-    runManager().debugSetRun({ state: "shop", shopItems: [], refreshCount: 0 });
-    runManager().refreshShop();
-    setDebugMode("manual");
-    setViewMode("game");
-  };
-
-  const testReward = () => {
-    if (!ensureDebugReady()) return;
-    runManager().debugSetRun({ currentEncounter: NORMAL_ENCOUNTERS[0], state: "battle" });
-    runManager().onBattleEnd(0);
-    setDebugMode("manual");
-    setViewMode("game");
-  };
-
-  const testRewardRefresh = () => runManager().onBattleEnd(0);
-
+  /** 遭遇选择时的调试回调 */
   function debugSelectEncounter(encounter: Encounter) {
     runManager().debugSetRun({ currentEncounter: encounter, state: "battle" });
     if (debugMode() === "autoWin") {
@@ -275,21 +254,8 @@ export function PvEMode(props: PvEModeProps) {
     }
   }
 
-  /** 切换测试角色选择 */
-  function toggleTestChar(id: number) {
-    const chars = testChars();
-    if (chars.includes(id)) {
-      setTestChars(chars.filter((c) => c !== id));
-    } else if (chars.length < 4) {
-      setTestChars([...chars, id]);
-    }
-  }
-
-  /** 当前测试角色组合下的卡池（响应式缓存） */
-  const testCardPool = createMemo(() => generateCardPool(data, testChars(), 4));
-
-  /** 自动分析的卡牌关系建议（只计算一次） */
-  const suggestedPairs = createMemo(() => analyzeRelationships());
+  /** 刷新奖励（调试用） */
+  const testRewardRefresh = () => runManager().onBattleEnd(0);
 
   return (
     <div class="pve-mode">
@@ -305,63 +271,15 @@ export function PvEMode(props: PvEModeProps) {
             <div class="pve-home-divider" />
 
             {/* 测试面板 */}
-            <div class="pve-debug-panel">
-              <h2 class="pve-debug-title">🧪 快速测试</h2>
-
-              {/* 角色选择 */}
-              <div class="pve-debug-section">
-                <h3>选择角色（点击切换，最多 4 个）</h3>
-                <div class="pve-debug-char-grid">
-                  <For each={CHARACTER_POOL}>
-                    {(char) => (
-                      <button
-                        class={`pve-debug-char ${testChars().includes(char.id) ? "pve-debug-char-selected" : ""}`}
-                        onClick={() => toggleTestChar(char.id)}
-                      >
-                        <img src={getImageUrl(char.id)} alt={char.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
-                        <span>{char.name}</span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-                <p class="pve-debug-hint">已选: {testChars().map((id) => CHARACTER_POOL.find((c) => c.id === id)?.name ?? id).join(", ")}</p>
-              </div>
-
-              {/* 初始货币 */}
-              <div class="pve-debug-section">
-                <h3>初始货币</h3>
-                <input type="number" value={testCurrency()} onInput={(e) => setTestCurrency(Number(e.currentTarget.value))} class="pve-debug-input" />
-              </div>
-
-              {/* 测试按钮 */}
-              <div class="pve-debug-actions">
-                <button onClick={testBattle}>⚔️ 测试战斗</button>
-                <button onClick={testShop}>🏪 测试商店</button>
-                <button onClick={testReward}>🎁 测试奖励</button>
-                <button onClick={testFullFlow}>🔄 完整流程（自动胜利）</button>
-                <button onClick={() => setShowCardPool(!showCardPool())}>🃏 查看卡池</button>
-              </div>
-
-              {/* 卡池查看器 */}
-              <Show when={showCardPool()}>
-                <div class="pve-cardpool">
-                  <h3>当前卡池（{testCardPool().length} 张）</h3>
-                  <div class="pve-cardpool-grid">
-                    <For each={testCardPool()}>
-                      {(card) => (
-                        <div class="pve-cardpool-item">
-                          <img src={getImageUrl(card.cardId)} alt={card.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
-                          <span>{card.name}</span>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-
-              {/* 卡牌关联编辑器 */}
-              <CardWeightEditor cardPool={testCardPool()} characterPool={CHARACTER_POOL} suggestedPairs={suggestedPairs()} />
-            </div>
+            <DebugPanel
+              characterPool={CHARACTER_POOL}
+              runManager={runManager}
+              onCreateRunManager={createRunManager}
+              onSetDebugMode={setDebugMode}
+              onSetViewMode={setViewMode}
+              onStartGame={startGame}
+              onDebugSelectEncounter={debugSelectEncounter}
+            />
           </div>
         </Match>
 
@@ -405,7 +323,7 @@ export function PvEMode(props: PvEModeProps) {
                     <For each={run().path}>
                       {(node, i) => (
                         <div class={`pve-path-node ${i() === run().currentNodeIndex ? "current" : ""} ${node.completed ? "completed" : ""}`}>
-                          <div class="pve-node-icon">{NODE_ICON[node.type]}</div>
+                          <div class="pve-node-icon">{NODE_INFO[node.type].icon}</div>
                           <div class="pve-node-type">{node.type}</div>
                         </div>
                       )}
@@ -416,13 +334,21 @@ export function PvEMode(props: PvEModeProps) {
                   <p class="pve-hint">最终挑战——击败Boss即可通关！</p>
                 </Show>
                 <div class="pve-encounters">
-                  <For each={debugMode() !== "off" ? ALL_ENCOUNTERS : runManager().getAvailableEncounters()}>
-                    {(encounter) => (
-                      <button class="pve-encounter-card" onClick={() => debugMode() !== "off" ? debugSelectEncounter(encounter) : selectEncounter(runManager().getAvailableEncounters().indexOf(encounter))}>
-                        <img class="pve-encounter-img" src={getImageUrl(encounter.script.characters[0])} alt={encounter.script.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+                  <For each={runManager().getAvailableEncounters()}>
+                    {(encounter, idx) => (
+                      <button class="pve-encounter-card" onClick={() => debugMode() !== "off" ? debugSelectEncounter(encounter) : selectEncounter(idx())}>
+                        <div class="pve-encounter-images">
+                          <For each={getEncounterCharacterIds(encounter)}>
+                            {(charId) => (
+                              <Show when={charId > 0} fallback={<div class="pve-encounter-img" style={{ width: "60px", height: "80px", background: "#334155", "border-radius": "4px" }} />}>
+                                <SafeImage class="pve-encounter-img" entityId={charId} alt={getCardName(charId)} loading="lazy" />
+                              </Show>
+                            )}
+                          </For>
+                        </div>
                         <div class="pve-encounter-type">{encounter.type}</div>
-                        <div class="pve-encounter-name">{encounter.script.name}</div>
-                        <div class="pve-encounter-reward">💰 {ENCOUNTER_CURRENCY[encounter.type]}</div>
+                        <div class="pve-encounter-name">{getEncounterName(encounter)}</div>
+                        <div class="pve-encounter-reward">💰 {getEncounterCurrency(encounter)}</div>
                       </button>
                     )}
                   </For>
@@ -442,7 +368,7 @@ export function PvEMode(props: PvEModeProps) {
           ) : (
             <div class="pve-battle-ready">
               <h2>准备战斗</h2>
-              <p>{run().currentEncounter?.script.name}</p>
+              <p>{(() => { const e = run().currentEncounter; return e ? getEncounterName(e) : ""; })()}</p>
               <div class="pve-actions">
                 <button onClick={startBattle}>开始战斗</button>
                 <button onClick={goHome}>返回首页</button>
@@ -466,7 +392,7 @@ export function PvEMode(props: PvEModeProps) {
                     class={`pve-reward-card ${selectedReward() === index() ? "selected" : ""}`}
                     onClick={() => setSelectedReward(index())}
                   >
-                    <img class="pve-card-img" src={getImageUrl(reward.cardId)} alt={reward.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+                    <SafeImage class="pve-card-img" entityId={reward.cardId} alt={reward.name} loading="lazy" />
                     <div class="pve-reward-name">{reward.name}</div>
                   </button>
                 )}
@@ -488,15 +414,19 @@ export function PvEMode(props: PvEModeProps) {
             <h2>商店</h2>
             <div class="pve-shop-info">
               <span>💰 {run().currency}</span>
-              <span>🔄 刷新: 💰{runManager().getRefreshCost()}</span>
-              <span>🗑️ 删牌: 💰{runManager().getDeleteCost()}</span>
-              <span>🃏 {run().shopItems.length} 件</span>
+              <span>🔄 刷新: 💰{getRefreshCost(run().refreshCount)}</span>
+              <span>🗑️ 删牌: 💰{getDeleteCost(run().deleteCount)}</span>
+              <span>🃏 剩余: {run().shopItems.length} 件</span>
             </div>
             <div class="pve-shop-actions">
-              <button onClick={refreshShop} disabled={run().currency < runManager().getRefreshCost()}>刷新商店</button>
+              <button onClick={refreshShop} disabled={run().currency < getRefreshCost(run().refreshCount)}>刷新商店</button>
               <button onClick={() => setShowDeck(!showDeck())}>{showDeck() ? "隐藏卡组" : "查看卡组"}</button>
-              <button onClick={finishShop}>离开商店</button>
-              <button onClick={goHome}>返回首页</button>
+              <Show when={debugMode() !== "manual"}>
+                <button onClick={finishShop}>离开商店</button>
+              </Show>
+              <Show when={debugMode() !== "off"}>
+                <button onClick={goHome}>返回首页</button>
+              </Show>
             </div>
             <div class="pve-shop-grid">
               <For each={run().shopItems}>
@@ -506,7 +436,7 @@ export function PvEMode(props: PvEModeProps) {
                     onClick={() => buyCard(index())}
                     disabled={run().currency < item.cost}
                   >
-                    <img class="pve-card-img" src={getImageUrl(item.cardId)} alt={item.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+                    <SafeImage class="pve-card-img" entityId={item.cardId} alt={item.name} loading="lazy" />
                     <div class="pve-item-name">{item.name}</div>
                     <div class="pve-item-cost">💰 {item.cost}</div>
                   </button>
@@ -522,6 +452,44 @@ export function PvEMode(props: PvEModeProps) {
               />
             </Show>
           </div>
+        </Match>
+
+        {/* 事件 */}
+        <Match when={run().state === "event"}>
+          {(() => {
+            const event = run().currentEvent;
+            if (!event) return null;
+            const renderedText = runManager().renderEventText(event.storyTemplate);
+            const effectDescs = runManager().getEventEffectDescriptions(event);
+            return (
+              <div class="pve-event">
+                <h2>{event.eventTag === "positive" ? "✨" : "💀"} {event.name}</h2>
+                <Show when={event.imageUrl}>
+                  <img class="pve-event-image" src={event.imageUrl} alt={event.name} />
+                </Show>
+                <Show when={!event.imageUrl}>
+                  <div class="pve-event-image-placeholder">
+                    {event.eventTag === "positive" ? "✨" : "💀"}
+                  </div>
+                </Show>
+                <p class="pve-event-story">{renderedText}</p>
+                <Show when={effectDescs.length > 0}>
+                  <div class="pve-event-effects">
+                    <h3>效果</h3>
+                    <For each={effectDescs}>{(desc) => (
+                      <div class="pve-event-effect-item">{desc}</div>
+                    )}</For>
+                  </div>
+                </Show>
+                <div class="pve-actions">
+                  <button onClick={() => runManager().confirmEvent()}>确认</button>
+                  <Show when={debugMode() !== "off"}>
+                    <button onClick={goHome}>返回首页</button>
+                  </Show>
+                </div>
+              </div>
+            );
+          })()}
         </Match>
 
         {/* 通关/失败 */}

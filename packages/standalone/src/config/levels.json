@@ -1,0 +1,12 @@
+{
+  "floors": [
+    { "floor": 1, "path": ["normal", "elite", "shop", "boss"] },
+    { "floor": 2, "path": ["normal", "elite", "shop", "boss"] },
+    { "floor": 3, "path": ["normal", "elite", "shop", "boss"] }
+  ],
+  "initialCurrency": 0,
+  "shopCardCount": 10,
+  "rewardCardCount": 5,
+  "interestThreshold": 50,
+  "interestRate": 10
+}

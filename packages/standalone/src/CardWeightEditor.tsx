@@ -15,18 +15,21 @@
 
 import { For, Show, createMemo, createSignal, onMount } from "solid-js";
 import {
-  getImageUrl,
-  FALLBACK_IMAGE,
   getCardName,
   getDirectCardWeight,
   setCardWeight,
   getAllWeightPairs,
   loadPairs,
-  clearAllWeights,
   snapWeight,
   pairKey,
   type SuggestedPair,
 } from "@gi-tcg/roguelike";
+import {
+  getCardWeights, setCardWeights,
+  configStore,
+  exportJson, importJson,
+} from "./configStore";
+import { SafeImage } from "./SafeImage";
 
 export interface CardWeightEditorProps {
   cardPool: { cardId: number; name: string }[];
@@ -54,15 +57,51 @@ const CATEGORY_COLORS: Record<string, string> = {
   general: "#868e96",
 };
 
+interface WeightSliderProps {
+  value: number;
+  onChange: (snapped: number) => void;
+  onInput?: (raw: number) => void;
+  class?: string;
+  sliderStyle?: string;
+  onClick?: (e: MouseEvent) => void;
+}
+
+function WeightSlider(props: WeightSliderProps) {
+  return (
+    <>
+      <input
+        type="range" min="0.1" max="1" step="any"
+        value={props.value}
+        onInput={(e) => props.onInput?.(Number(e.currentTarget.value))}
+        onChange={(e) => {
+          const snapped = snapWeight(Number(e.currentTarget.value));
+          props.onChange(snapped);
+        }}
+        class={`pve-weight-slider ${props.class ?? ""}`.trim()}
+        style={props.sliderStyle ? { width: props.sliderStyle } : undefined}
+        onClick={props.onClick}
+      />
+      <input
+        type="number" min="0.1" max="1" step="0.1"
+        value={props.value.toFixed(1)}
+        onChange={(e) => {
+          const v = Number(e.currentTarget.value);
+          if (v >= 0.1 && v <= 1) {
+            props.onChange(snapWeight(v));
+          }
+        }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+        class="input-field pve-weight-num-input"
+        onClick={props.onClick}
+      />
+    </>
+  );
+}
+
 export function CardWeightEditor(props: CardWeightEditorProps) {
   const [mainCard, setMainCard] = createSignal<number>(0);
-  const [version, setVersion] = createSignal(0);
-  const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
   const [showSuggestions, setShowSuggestions] = createSignal(false);
-  const [categoryWeights, setCategoryWeights] = createSignal<Record<string, number>>({});
   const [mode, setMode] = createSignal<"edit" | "add">("edit");
-  // 拖拽状态：正在拖动的卡 ID 和临时值（避免每帧触发保存和重计算）
-  const [dragging, setDragging] = createSignal<{ id: number; value: number } | null>(null);
   // 批量调节：多选卡牌集合
   const [selectedCards, setSelectedCards] = createSignal<Set<number>>(new Set());
   // 是否进入多选模式
@@ -72,56 +111,30 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   // 批量调节：当前拖拽值
   const [batchValue, setBatchValue] = createSignal(0.5);
 
-  const STORAGE_KEY = "gi-tcg-card-weights";
-  const DISMISSED_KEY = "gi-tcg-dismissed-suggestions";
-  const CATEGORY_W_KEY = "gi-tcg-category-weights";
-
   /** 保存当前配置到 localStorage */
   const saveToStorage = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, pairs: getAllWeightPairs() }));
-    } catch { /* quota exceeded, ignore */ }
+    setCardWeights({ version: 1, pairs: getAllWeightPairs() });
   };
 
   /** 从 localStorage 加载配置 */
   const loadFromStorage = () => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const config = JSON.parse(raw);
-      if (!config.pairs || !Array.isArray(config.pairs)) return;
-      const valid = config.pairs.filter((p: any) =>
-        typeof p?.a === "number" && typeof p?.b === "number" && typeof p?.weight === "number"
-      );
-      loadPairs(valid);
-    } catch { /* invalid JSON, ignore */ }
+    const config = getCardWeights();
+    if (!config.pairs || !Array.isArray(config.pairs)) return;
+    const valid = config.pairs.filter((p: any) =>
+      typeof p?.a === "number" && typeof p?.b === "number" && typeof p?.weight === "number"
+    );
+    loadPairs(valid);
   };
 
   // 组件挂载时加载保存的配置
   onMount(() => {
     loadFromStorage();
-    try {
-      const raw = localStorage.getItem(DISMISSED_KEY);
-      if (raw) {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) setDismissed(new Set(arr));
-      }
-    } catch { /* ignore */ }
-    try {
-      const raw = localStorage.getItem(CATEGORY_W_KEY);
-      if (raw) {
-        const obj = JSON.parse(raw);
-        if (obj && typeof obj === "object") setCategoryWeights(obj);
-      }
-    } catch { /* ignore */ }
-    setVersion((n) => n + 1);
   });
 
   /** 修改权重并自动保存 */
   const saveWeight = (a: number, b: number, weight: number) => {
     setCardWeight(a, b, weight);
     saveToStorage();
-    setVersion((n) => n + 1);
   };
 
   const sortedCards = createMemo(() => {
@@ -136,14 +149,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
   /** 单次获取所有手动对（避免 3 个 memo 各自调用 getAllWeightPairs） */
   const allWeightPairs = createMemo(() => {
-    version();
+    configStore.cardWeights();
     return getAllWeightPairs();
   });
 
   /** 未被采纳/忽略的建议（共享过滤逻辑） */
   const filteredSuggestions = createMemo(() => {
     const pairs = props.suggestedPairs ?? [];
-    const dismissedSet = dismissed();
+    const dismissedSet = configStore.dismissed();
     const manualKeys = new Set(allWeightPairs().map((p) => pairKey(p.a, p.b)));
     return pairs.filter((p) => {
       const key = pairKey(p.a, p.b);
@@ -165,7 +178,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
   /** 获取建议的有效权重（类别自定义优先） */
   const effectiveWeight = (pair: SuggestedPair): number =>
-    categoryWeights()[pair.category] ?? pair.weight;
+    configStore.categoryWeights()[pair.category] ?? pair.weight;
 
   /** 主体卡的所有关联卡（列表 + 查找表一次构建） */
   const relatedData = createMemo(() => {
@@ -242,7 +255,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     for (const r of relatedCards()) {
       if (sel.has(r.id)) setCardWeight(mainCard(), r.id, value);
     }
-    setVersion((n) => n + 1);
+    configStore.setCardWeights({ version: 1, pairs: getAllWeightPairs() });
   };
 
   /** 切换多选状态 */
@@ -285,7 +298,6 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     const orig = batchOriginals();
     for (const [id, weight] of orig) setCardWeight(mainCard(), id, weight);
     saveToStorage();
-    setVersion((n) => n + 1);
     exitMultiSelect();
   };
 
@@ -316,73 +328,48 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   };
 
   const dismissSuggestion = (pair: SuggestedPair) => {
-    const d = new Set(dismissed());
+    const d = new Set(configStore.dismissed());
     d.add(pairKey(pair.a, pair.b));
-    setDismissed(d);
-    try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...d])); } catch { /* ignore */ }
+    configStore.setDismissed([...d]);
   };
 
   const updateCategoryWeight = (category: string, weight: number) => {
-    const cw = { ...categoryWeights() };
+    const cw = { ...configStore.categoryWeights() };
     cw[category] = weight;
-    setCategoryWeights(cw);
-    try { localStorage.setItem(CATEGORY_W_KEY, JSON.stringify(cw)); } catch { /* ignore */ }
-    setVersion((n) => n + 1);
+    configStore.setCategoryWeights(cw);
   };
 
   const acceptCategory = (category: string) => {
     const pairs = groupedSuggestions()[category] ?? [];
-    const w = categoryWeights()[category] ?? pairs[0]?.weight ?? 0.5;
+    const w = configStore.categoryWeights()[category] ?? pairs[0]?.weight ?? 0.5;
     for (const p of pairs) setCardWeight(p.a, p.b, w);
     saveToStorage();
-    setVersion((n) => n + 1);
   };
 
   /** 导出当前配置为 JSON 文件下载 */
   const exportConfig = () => {
-    const config = { version: 1, pairs: allWeightPairs() };
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "card-weights.json";
-    a.click();
-    URL.revokeObjectURL(url);
+    exportJson({ version: 1, pairs: allWeightPairs() }, "card-weights.json");
   };
 
   /** 从 JSON 文件导入配置 */
-  const importConfig = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const config = JSON.parse(text);
-        if (!config.pairs || !Array.isArray(config.pairs)) {
-          alert("无效的配置文件");
-          return;
-        }
-        loadPairs(config.pairs);
-        saveToStorage();
-        setVersion((n) => n + 1);
-      } catch {
-        alert("解析失败，请检查文件格式");
-      }
-    };
-    input.click();
+  const importConfig = async () => {
+    const config = await importJson<{ version?: number; pairs?: any[] }>();
+    if (!config) return;
+    if (!config.pairs || !Array.isArray(config.pairs)) {
+      alert("无效的配置文件");
+      return;
+    }
+    loadPairs(config.pairs);
+    saveToStorage();
   };
 
   return (
     <div class="pve-debug-section">
-      <h3>🃏 卡牌关联编辑器</h3>
-
-      {/* 导入/导出按钮 */}
+      {/* 导入/导出/保存按钮 */}
       <div class="pve-weight-io-bar">
-        <button onClick={exportConfig} class="pve-weight-io-btn">📥 导出配置</button>
-        <button onClick={importConfig} class="pve-weight-io-btn">📤 导入配置</button>
+        <button onClick={exportConfig} class="editor-btn">导出</button>
+        <button onClick={importConfig} class="editor-btn">导入</button>
+        <button onClick={() => { saveToStorage(); alert("已保存到本地存储"); }} class="editor-btn editor-btn-save">保存</button>
       </div>
 
       <Show when={mainCard() !== 0}>
@@ -391,7 +378,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
             <span>主体: <b>{getCardName(mainCard())}</b></span>
             <span class="pve-weight-main-count">({relatedCards().length} 关联)</span>
             <Show when={mode() === "add"}>
-              <button onClick={() => setMainCard(0)} class="pve-weight-clear">重选</button>
+              <button onClick={() => setMainCard(0)} class="btn-sm pve-weight-clear">重选</button>
             </Show>
           </div>
           <div class="pve-weight-mode-bar">
@@ -404,7 +391,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         <p class="pve-weight-hint">点击一张卡牌作为关联主体</p>
       </Show>
 
-      <div class="pve-weight-grid">
+      <div class="card-grid pve-weight-grid">
         <For each={sortedCards()}>
           {(card) => {
             const rel = () => relatedMap().get(card.id);
@@ -418,16 +405,16 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
             };
             return (
               <button
-                class={`pve-weight-card ${st() === "main" ? "pve-weight-card-main" : ""} ${st() === "related-manual" ? "pve-weight-card-selected" : ""} ${st() === "related-suggested" ? "pve-weight-card-suggested" : ""}`}
+                class={`card-item pve-weight-card ${st() === "main" ? "pve-weight-card-main" : ""} ${st() === "related-manual" ? "card-item-selected pve-weight-card-selected" : ""} ${st() === "related-suggested" ? "pve-weight-card-suggested" : ""}`}
                 onClick={() => onCardClick(card.id)}
               >
-                <img src={getImageUrl(card.id)} alt={card.name} loading="lazy" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+                <SafeImage entityId={card.id} alt={card.name} loading="lazy" />
                 <span>{card.name}</span>
                 <Show when={st() === "related-manual"}>
-                  <span class="pve-weight-badge">{(dragging()?.id === card.id ? dragging()!.value : rel()!.weight).toFixed(1)}</span>
+                  <span class="pve-weight-badge">{rel()!.weight.toFixed(1)}</span>
                 </Show>
                 <Show when={st() === "related-suggested"}>
-                  <span class="pve-weight-badge-suggest">{(dragging()?.id === card.id ? dragging()!.value : rel()!.weight).toFixed(1)}</span>
+                  <span class="pve-weight-badge-suggest">{rel()!.weight.toFixed(1)}</span>
                 </Show>
               </button>
             );
@@ -439,13 +426,13 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         {/* 工具栏 */}
         <div class="pve-weight-toolbar">
           <Show when={!multiSelectMode()}>
-            <button onClick={enterMultiSelect} class="pve-weight-toolbar-btn">☑ 多选</button>
+            <button onClick={enterMultiSelect} class="btn-sm pve-weight-toolbar-btn">☑ 多选</button>
           </Show>
           <Show when={multiSelectMode()}>
-            <button onClick={toggleSelectAll} class="pve-weight-toolbar-btn">
+            <button onClick={toggleSelectAll} class="btn-sm pve-weight-toolbar-btn">
               {selectedCards().size === relatedCards().length ? "取消全选" : "全选"}
             </button>
-            <button onClick={exitMultiSelect} class="pve-weight-toolbar-btn">取消多选</button>
+            <button onClick={exitMultiSelect} class="btn-sm pve-weight-toolbar-btn">取消多选</button>
           </Show>
         </div>
 
@@ -453,41 +440,23 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         <Show when={multiSelectMode() && selectedCards().size > 0}>
           <div class="pve-weight-batch-bar">
             <span class="pve-weight-batch-label">批量调节（{selectedCards().size} 张）</span>
-            <input
-              type="range" min="0.1" max="1" step="any"
+            <WeightSlider
               value={batchValue()}
-              onInput={(e) => setBatchValue(Number(e.currentTarget.value))}
-              onChange={(e) => {
-                const snapped = snapWeight(Number(e.currentTarget.value));
+              onInput={(raw) => setBatchValue(raw)}
+              onChange={(snapped) => {
                 setBatchValue(snapped);
                 applyBatchPreview(snapped);
               }}
-              class="pve-weight-slider"
             />
-            <input
-              type="number" min="0.1" max="1" step="0.1"
-              value={batchValue().toFixed(1)}
-              onInput={(e) => setBatchValue(Number(e.currentTarget.value))}
-              onChange={(e) => {
-                const v = Number(e.currentTarget.value);
-                if (v >= 0.1 && v <= 1) {
-                  const snapped = snapWeight(v);
-                  setBatchValue(snapped);
-                  applyBatchPreview(snapped);
-                }
-              }}
-              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-              class="pve-weight-num-input"
-            />
-            <button onClick={acceptBatch} class="pve-weight-batch-accept">✓</button>
-            <button onClick={rejectBatch} class="pve-weight-batch-reject">✕</button>
+            <button onClick={acceptBatch} class="btn-sm btn-sm-green pve-weight-batch-accept">✓</button>
+            <button onClick={rejectBatch} class="btn-sm btn-sm-red pve-weight-batch-reject">✕</button>
           </div>
         </Show>
 
         <div class="pve-weight-rel-list">
           <For each={relatedCards()}>
             {(rel) => (
-              <div class={`pve-weight-rel-item ${selectedCards().has(rel.id) ? "pve-weight-rel-selected" : ""}`}>
+              <div class={`pve-weight-rel-item${selectedCards().has(rel.id) ? " pve-weight-rel-selected" : ""}`}>
                 <Show when={multiSelectMode()}>
                   <input
                     type="checkbox"
@@ -496,7 +465,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     class="pve-weight-rel-check"
                   />
                 </Show>
-                <img src={getImageUrl(rel.id)} alt={getCardName(rel.id)} class="pve-weight-rel-img" onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)} />
+                <SafeImage entityId={rel.id} alt={getCardName(rel.id)} class="pve-weight-rel-img" />
                 <div class="pve-weight-rel-info">
                   <span class="pve-weight-rel-name">{getCardName(rel.id)}</span>
                   <Show when={rel.source === "suggested" && rel.pair}>
@@ -505,34 +474,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     </span>
                   </Show>
                 </div>
-                <input
-                  type="range" min="0.1" max="1" step="any"
-                  value={dragging()?.id === rel.id ? dragging()!.value : rel.weight}
-                  onInput={(e) => setDragging({ id: rel.id, value: Number(e.currentTarget.value) })}
-                  onChange={(e) => {
-                    const snapped = snapWeight(Number(e.currentTarget.value));
+                <WeightSlider
+                  value={rel.weight}
+                  onChange={(snapped) => {
                     if (rel.source === "suggested" && rel.pair) acceptSuggestion(rel.pair);
                     updateWeight(rel.id, snapped);
-                    setDragging(null);
                   }}
-                  class="pve-weight-slider"
                 />
-                <input
-                  type="number" min="0.1" max="1" step="0.1"
-                  value={(dragging()?.id === rel.id ? dragging()!.value : rel.weight).toFixed(1)}
-                  onInput={(e) => setDragging({ id: rel.id, value: Number(e.currentTarget.value) })}
-                  onChange={(e) => {
-                    const v = Number(e.currentTarget.value);
-                    if (v >= 0.1 && v <= 1) {
-                      if (rel.source === "suggested" && rel.pair) acceptSuggestion(rel.pair);
-                      updateWeight(rel.id, snapWeight(v));
-                    }
-                    setDragging(null);
-                  }}
-                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-                  class="pve-weight-num-input"
-                />
-                <button onClick={() => removeRelation(rel.id)} class="pve-weight-remove">✕</button>
+                <button onClick={() => removeRelation(rel.id)} class="btn-sm btn-sm-red pve-weight-remove">✕</button>
               </div>
             )}
           </For>
@@ -541,7 +490,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
       <Show when={(props.suggestedPairs?.length ?? 0) > 0}>
         <div class="pve-weight-suggest-toggle">
-          <button onClick={() => setShowSuggestions(!showSuggestions())} class="pve-weight-suggest-btn">
+          <button onClick={() => setShowSuggestions(!showSuggestions())} class="editor-btn editor-btn-blue">
             {showSuggestions() ? "收起自动分析 ▲" : `展开自动分析 (${filteredSuggestions().length} 条) ▼`}
           </button>
         </div>
@@ -551,7 +500,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         <div class="pve-weight-suggestions">
           {Object.entries(groupedSuggestions()).map(([category, pairs]) => {
             const defaultW = pairs[0]?.weight ?? 0.5;
-            const currentW = () => categoryWeights()[category] ?? defaultW;
+            const currentW = () => configStore.categoryWeights()[category] ?? defaultW;
             return (
             <div class="pve-weight-suggest-group" data-category={category}>
               <div class="pve-weight-suggest-header">
@@ -559,34 +508,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                   ● {CATEGORY_LABELS[category] ?? category}
                 </span>
                 <span class="pve-weight-suggest-count">({pairs.length})</span>
-                <input
-                  type="range" min="0.1" max="1" step="any"
+                <WeightSlider
                   value={currentW()}
-                  onInput={(e) => {
-                    // 只更新类别权重信号，不触发 memo 重算
-                    const cw = { ...categoryWeights() };
-                    cw[category] = Number(e.currentTarget.value);
-                    setCategoryWeights(cw);
-                  }}
-                  onChange={(e) => {
-                    const snapped = snapWeight(Number(e.currentTarget.value));
-                    updateCategoryWeight(category, snapped);
-                  }}
-                  class="pve-weight-slider" style={{ width: "80px" }}
-                  onClick={(e) => e.stopPropagation()}
+                  onInput={(raw) => updateCategoryWeight(category, raw)}
+                  onChange={(snapped) => updateCategoryWeight(category, snapped)}
+                  sliderStyle="80px"
+                  onClick={(e: MouseEvent) => e.stopPropagation()}
                 />
-                <input
-                  type="number" min="0.1" max="1" step="0.1"
-                  value={currentW().toFixed(1)}
-                  onInput={(e) => {
-                    const v = Number(e.currentTarget.value);
-                    if (v >= 0.1 && v <= 1) updateCategoryWeight(category, snapWeight(v));
-                  }}
-                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-                  class="pve-weight-num-input"
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <button onClick={(e) => { e.stopPropagation(); acceptCategory(category); }} class="pve-weight-accept-all">全部采纳</button>
+                <button onClick={(e) => { e.stopPropagation(); acceptCategory(category); }} class="btn-sm btn-sm-green pve-weight-accept-all">全部采纳</button>
               </div>
               <div class="pve-weight-suggest-list">
                 {pairs.slice(0, 20).map((pair) => (
@@ -594,8 +523,8 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     <span class="pve-weight-suggest-names">{getCardName(pair.a)} ↔ {getCardName(pair.b)}</span>
                     <span class="pve-weight-suggest-weight">{effectiveWeight(pair).toFixed(1)}</span>
                     <span class="pve-weight-suggest-reason">{pair.reason}</span>
-                    <button onClick={(e) => { e.stopPropagation(); acceptSuggestion(pair); }} class="pve-weight-accept">✓</button>
-                    <button onClick={(e) => { e.stopPropagation(); dismissSuggestion(pair); }} class="pve-weight-dismiss">✕</button>
+                    <button onClick={(e) => { e.stopPropagation(); acceptSuggestion(pair); }} class="btn-sm btn-sm-green pve-weight-accept">✓</button>
+                    <button onClick={(e) => { e.stopPropagation(); dismissSuggestion(pair); }} class="btn-sm pve-weight-dismiss">✕</button>
                   </div>
                 ))}
                 {pairs.length > 20 && <div class="pve-weight-suggest-more">...还有 {pairs.length - 20} 对</div>}
