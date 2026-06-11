@@ -6,3 +6,7 @@ node_modules
 
 dist
 temp
+
+# Local dev docs
+CLAUDE.md
+packages/standalone/REFACTOR-PLAN.md
