@@ -10,3 +10,12 @@ temp
 # Local dev docs
 CLAUDE.md
 packages/standalone/REFACTOR-PLAN.md
+
+# Claude Code
+.agents/
+.claude/
+.playwright-mcp/
+skills-lock.json
+
+# Dev notes
+事件卡牌整理.md
