@@ -30,6 +30,15 @@ export interface CardWeightConfig {
   pairs: CardWeightPair[];
 }
 
+/**
+ * 可选的持久化适配器接口。
+ * 传入后，CardWeightManager 的写操作会自动持久化。
+ */
+export interface CardWeightStorageAdapter {
+  load(): CardWeightPair[];
+  save(pairs: CardWeightPair[]): void;
+}
+
 /** 规范化无序对的 key（a < b 保证唯一） */
 export function pairKey(a: number, b: number): string {
   return a < b ? `${a}-${b}` : `${b}-${a}`;
@@ -50,12 +59,23 @@ export class CardWeightManager {
   private adjacencyMap: Map<number, Map<number, number>> = new Map();
   /** 当前配置 */
   private config: CardWeightConfig;
+  /** 可选持久化适配器 */
+  private storage?: CardWeightStorageAdapter;
+  /** 批处理模式：抑制 persist 直到 endBatch */
+  private _batching = false;
 
-  constructor(config?: CardWeightConfig) {
-    this.config = config ?? {
-      version: defaultConfig.version,
-      pairs: [...(defaultConfig.pairs as CardWeightPair[])],
-    };
+  constructor(config?: CardWeightConfig, storage?: CardWeightStorageAdapter) {
+    this.storage = storage;
+    if (storage) {
+      // 有存储适配器时，从存储加载
+      const stored = storage.load();
+      this.config = { version: 1, pairs: stored };
+    } else {
+      this.config = config ?? {
+        version: defaultConfig.version,
+        pairs: [...(defaultConfig.pairs as CardWeightPair[])],
+      };
+    }
     this.rebuildAdjacencyMap();
   }
 
@@ -126,7 +146,7 @@ export class CardWeightManager {
 
   /**
    * 设置两张卡之间的关联权重（对称）。
-   * weight 为 0 时删除关联。
+   * weight 为 0 时删除关联。有存储适配器时自动持久化。
    */
   setCardWeight(a: number, b: number, weight: number): void {
     // 增量更新 pairs 数组
@@ -147,18 +167,48 @@ export class CardWeightManager {
       if (!mapB) { mapB = new Map(); this.adjacencyMap.set(b, mapB); }
       mapB.set(a, weight);
     }
+    this.persist();
   }
 
-  /** 清空所有手动设置的关联权重。 */
+  /** 清空所有手动设置的关联权重。有存储适配器时自动持久化。 */
   clearAllWeights(): void {
     this.config.pairs = [];
     this.rebuildAdjacencyMap();
+    this.persist();
   }
 
-  /** 批量加载权重对（仅重建一次邻接表）。 */
+  /** 重置为 card-weights.json 中的默认权重数据。有存储适配器时自动持久化。 */
+  resetToDefault(): void {
+    this.config = {
+      version: defaultConfig.version,
+      pairs: [...(defaultConfig.pairs as CardWeightPair[])],
+    };
+    this.rebuildAdjacencyMap();
+    this.persist();
+  }
+
+  /** 批量加载权重对（仅重建一次邻接表）。有存储适配器时自动持久化。 */
   loadPairs(pairs: CardWeightPair[]): void {
     this.config.pairs = pairs.filter((p) => p.weight > 0);
     this.rebuildAdjacencyMap();
+    this.persist();
+  }
+
+  /** 如果有存储适配器，将当前权重对持久化 */
+  private persist(): void {
+    if (this._batching) return;
+    this.storage?.save([...this.config.pairs]);
+  }
+
+  /** 开始批量操作（抑制中间持久化） */
+  beginBatch(): void {
+    this._batching = true;
+  }
+
+  /** 结束批量操作（触发一次持久化） */
+  endBatch(): void {
+    this._batching = false;
+    this.persist();
   }
 
   /** 获取所有非零权重的卡牌对。 */

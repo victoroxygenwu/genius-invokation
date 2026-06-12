@@ -12,12 +12,15 @@ import {
   type CharacterPoolEntry,
   type EnemyConfig,
 } from "@gi-tcg/roguelike";
-import { getEnemyPool, configStore } from "./configStore";
+import { configStore } from "./configStore";
+import { DebugRunController } from "./debug-run-controller";
 import { SafeImage } from "./SafeImage";
+import { useDragSelect } from "./useDragSelect";
+import { EntityGrid } from "./EntityGrid";
 import { CardWeightEditor } from "./CardWeightEditor";
 import { EnemyEditor } from "./EnemyEditor";
 import { LevelEditor } from "./LevelEditor";
-import { EventTestPanel } from "./EventTestPanel";
+import { EventEditor } from "./EventEditor";
 import { OverlayPanel } from "./OverlayPanel";
 import { NumberInput } from "./NumberInput";
 
@@ -25,7 +28,7 @@ const data = getData(CURRENT_VERSION);
 
 /** 从敌人池构建全部遭遇列表 */
 function buildEncounters() {
-  const pool = getEnemyPool();
+  const pool = configStore.enemyPool();
   return [
     ...pool.normal.map((c: EnemyConfig) => createEncounter("normal", c)),
     ...pool.elite.map((c: EnemyConfig) => createEncounter("elite", c)),
@@ -39,12 +42,14 @@ export interface DebugPanelProps {
   onCreateRunManager: () => void;
   onSetDebugMode: (mode: "off" | "manual" | "autoWin") => void;
   onSetViewMode: (mode: "home" | "game") => void;
+  onSetTestBattleMode: (v: boolean) => void;
   onStartGame: () => void;
   /** 遭遇选择时的调试回调（自动胜利模式下自动结束战斗） */
   onDebugSelectEncounter?: (encounter: Encounter) => void;
 }
 
 export function DebugPanel(props: DebugPanelProps) {
+  const ctrl = () => new DebugRunController(props.runManager());
   // 测试配置
   const [testChars, setTestChars] = createSignal<number[]>([]);
   // 从关卡编辑全局参数读取初始货币和商店卡数
@@ -52,15 +57,10 @@ export function DebugPanel(props: DebugPanelProps) {
 
   // 面板展开/折叠状态
   const [showPanel, setShowPanel] = createSignal(false);
-  // 首次展开时初始化默认角色
-  const [charsInitialized, setCharsInitialized] = createSignal(false);
 
-  // 编辑器弹窗状态
-  const [showCardPool, setShowCardPool] = createSignal(false);
-  const [showEnemyEditor, setShowEnemyEditor] = createSignal(false);
-  const [showLevelEditor, setShowLevelEditor] = createSignal(false);
-  const [showCardWeightEditor, setShowCardWeightEditor] = createSignal(false);
-  const [showEventTestPanel, setShowEventTestPanel] = createSignal(false);
+  // 编辑器弹窗状态（互斥，同一时间只能打开一个）
+  type PanelId = "cardPool" | "enemyEditor" | "levelEditor" | "cardWeights" | "eventEditor";
+  const [activePanel, setActivePanel] = createSignal<PanelId | null>(null);
 
   // 卡池查看器状态
   const cardCosts = configStore.cardCosts;
@@ -68,9 +68,6 @@ export function DebugPanel(props: DebugPanelProps) {
   const [selectedCards, setSelectedCards] = createSignal<Set<number>>(new Set());
   const [batchCost, setBatchCost] = createSignal(DEFAULT_SHOP_CARD_COST);
   const [cardPoolMultiSelect, setCardPoolMultiSelect] = createSignal(false);
-  const [isDragging, setIsDragging] = createSignal(false);
-  /** 拖动方向："select" = 拖动选中，"deselect" = 拖动取消选中 */
-  const [dragAction, setDragAction] = createSignal<"select" | "deselect" | null>(null);
 
   /** 切换卡池多选中的卡牌选中状态 */
   const togglePoolCard = (cardId: number) => {
@@ -78,6 +75,20 @@ export function DebugPanel(props: DebugPanelProps) {
     s.has(cardId) ? s.delete(cardId) : s.add(cardId);
     setSelectedCards(s);
   };
+
+  // 卡池网格拖拽选择
+  const poolDrag = useDragSelect({
+    guard: () => cardPoolMultiSelect(),
+    resolveId: (e) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      if (!el) return null;
+      const item = el.closest("[data-card-id]") as HTMLElement | null;
+      if (!item) return null;
+      return Number(item.dataset.cardId) || null;
+    },
+    isSelected: (id) => selectedCards().has(id),
+    toggle: togglePoolCard,
+  });
 
   /** 当前测试角色组合下的卡池（响应式缓存） */
   const testCardPool = createMemo(() => generateCardPool(data, testChars(), 4));
@@ -91,34 +102,52 @@ export function DebugPanel(props: DebugPanelProps) {
     if (chars.length < 2) { alert("至少选择 2 个角色"); return null; }
     // 重建 runManager 确保使用最新的关卡配置（利息、商店卡数等）
     props.onCreateRunManager();
-    props.runManager().debugQuickStart(chars, currency ?? levelConfig().initialCurrency);
+    ctrl().quickStart(chars, currency ?? levelConfig().initialCurrency);
     return chars;
   }
 
-  /** 进入测试模式（选敌人界面） */
-  function enterDebugBattle(autoWin: boolean) {
+  /** 测试战斗：直接跳到第一个战斗节点，跳过事件和路径图 */
+  const testBattle = () => {
     if (!ensureDebugReady()) return;
-    props.onSetDebugMode(autoWin ? "autoWin" : "manual");
+    const rm = props.runManager();
+    const run = rm.getRun();
+    // 找到第一个战斗节点（normal/elite/boss）
+    const battleNodeIdx = run.path.findIndex((n) => n.type === "normal" || n.type === "elite" || n.type === "boss");
+    if (battleNodeIdx < 0) {
+      alert("当前关卡没有战斗节点！");
+      return;
+    }
+    ctrl().setRun({ currentNodeIndex: battleNodeIdx, state: "encounterSelect" });
+    props.onSetTestBattleMode(true);
+    props.onSetDebugMode("manual");
     props.onSetViewMode("game");
-  }
+  };
 
-  const testBattle = () => enterDebugBattle(false);
-  const testFullFlow = () => enterDebugBattle(true);
+  /** 测试流程：正常流程 + 自动胜利 */
+  const testFullFlow = () => {
+    if (!ensureDebugReady()) return;
+    props.onSetTestBattleMode(false);
+    props.onSetDebugMode("autoWin");
+    props.onSetViewMode("game");
+  };
 
   const testShop = () => {
     if (!ensureDebugReady()) return;
     const rm = props.runManager();
     const run = rm.getRun();
     const items = rollShopCards(levelConfig().shopCardCount, { data, characterIds: run.characters, floor: run.floor, deck: run.deck, cardCosts: cardCosts() });
-    rm.debugSetRun({ state: "shop", shopItems: items, refreshCount: 0 });
+    ctrl().setRun({ state: "shop", shopItems: items, refreshCount: 0 });
+    props.onSetTestBattleMode(false);
     props.onSetDebugMode("manual");
     props.onSetViewMode("game");
   };
 
   const testReward = () => {
     if (!ensureDebugReady()) return;
-    props.runManager().debugSetRun({ currentEncounter: buildEncounters()[0], state: "battle" });
+    const encounter = buildEncounters()[0];
+    ctrl().setRun({ currentEncounter: encounter, state: "battle" });
     props.runManager().onBattleEnd(0);
+    props.onSetTestBattleMode(false);
     props.onSetDebugMode("manual");
     props.onSetViewMode("game");
   };
@@ -136,13 +165,10 @@ export function DebugPanel(props: DebugPanelProps) {
   /** 展开面板时初始化默认角色 */
   function expandPanel() {
     setShowPanel(true);
-    if (!charsInitialized()) {
-      setCharsInitialized(true);
-      // 从角色池中选取前两个作为默认角色
-      const pool = props.characterPool;
-      if (pool.length >= 2 && testChars().length === 0) {
-        setTestChars([pool[0].id, pool[1].id]);
-      }
+    // 首次展开时从角色池中选取前两个作为默认角色
+    const pool = props.characterPool;
+    if (pool.length >= 2 && testChars().length === 0) {
+      setTestChars([pool[0].id, pool[1].id]);
     }
   }
 
@@ -157,19 +183,15 @@ export function DebugPanel(props: DebugPanelProps) {
         {/* 角色选择 */}
         <div class="pve-debug-section">
           <h3>选择角色（点击切换，最多 4 个）</h3>
-          <div class="card-grid pve-debug-char-grid">
-            <For each={props.characterPool}>
-              {(char) => (
-                <button
-                  class={`card-item pve-debug-char ${testChars().includes(char.id) ? "pve-debug-char-selected" : ""}`}
-                  onClick={() => toggleTestChar(char.id)}
-                >
-                  <SafeImage entityId={char.id} alt={char.name} loading="lazy" />
-                  <span>{char.name}</span>
-                </button>
-              )}
-            </For>
-          </div>
+          <EntityGrid
+            items={props.characterPool}
+            mode="multi"
+            selected={new Set(testChars())}
+            maxSelect={4}
+            onChange={(_id, sel) => setTestChars([...sel!])}
+            class="pve-debug-char-grid"
+            itemClass="pve-debug-char"
+          />
           <p class="pve-debug-hint">已选: {testChars().map((id) => props.characterPool.find((c) => c.id === id)?.name ?? id).join(", ")}</p>
         </div>
 
@@ -179,21 +201,16 @@ export function DebugPanel(props: DebugPanelProps) {
           <button class="editor-btn editor-btn-blue" onClick={testShop}>🏪 测试商店</button>
           <button class="editor-btn editor-btn-blue" onClick={testReward}>🎁 测试奖励</button>
           <button class="editor-btn editor-btn-blue" onClick={testFullFlow}>🔄 测试流程</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => setShowCardPool(!showCardPool())}>🃏 费用编辑</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => setShowEnemyEditor(true)}>👾 怪物编辑</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => setShowLevelEditor(true)}>🗺️ 关卡编辑</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => setShowCardWeightEditor(true)}>⚖️ 权重编辑</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => {
-            if (!ensureDebugReady()) return;
-            props.onSetDebugMode("manual");
-            props.onSetViewMode("game");
-            setShowEventTestPanel(true);
-          }}>📜 测试事件</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel(activePanel() === "cardPool" ? null : "cardPool")}>🃏 费用编辑</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("enemyEditor")}>👾 怪物编辑</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("levelEditor")}>🗺️ 关卡编辑</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("cardWeights")}>⚖️ 权重编辑</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("eventEditor")}>📜 事件编辑</button>
         </div>
 
         {/* 卡池查看器 */}
-        <Show when={showCardPool()}>
-          <OverlayPanel title="🃏 费用编辑" onClose={() => setShowCardPool(false)}>
+        <Show when={activePanel() === "cardPool"}>
+          <OverlayPanel title="🃏 费用编辑" onClose={() => setActivePanel(null)}>
             <div class="pve-cardpool">
               <h3>当前卡池（{testCardPool().length} 张）</h3>
               <div class="pve-cardpool-actions">
@@ -222,32 +239,10 @@ export function DebugPanel(props: DebugPanelProps) {
                 </Show>
               </div>
               <div class="card-grid pve-cardpool-grid"
-                onMouseDown={(e) => {
-                  if (!cardPoolMultiSelect()) return;
-                  const el = (e.target as HTMLElement).closest("[data-card-id]") as HTMLElement | null;
-                  if (!el) return;
-                  const cardId = Number(el.dataset.cardId);
-                  if (!cardId) return;
-                  setIsDragging(true);
-                  const wasSelected = selectedCards().has(cardId);
-                  setDragAction(wasSelected ? "deselect" : "select");
-                  togglePoolCard(cardId);
-                }}
-                onMouseUp={() => { setIsDragging(false); setDragAction(null); }}
-                onMouseLeave={() => { setIsDragging(false); setDragAction(null); }}
-                onMouseMove={(e) => {
-                  if (!isDragging() || !cardPoolMultiSelect()) return;
-                  const el = (e.target as HTMLElement).closest("[data-card-id]") as HTMLElement | null;
-                  if (!el) return;
-                  const cardId = Number(el.dataset.cardId);
-                  if (!cardId) return;
-                  const isSelected = selectedCards().has(cardId);
-                  if (dragAction() === "select" && !isSelected) {
-                    togglePoolCard(cardId);
-                  } else if (dragAction() === "deselect" && isSelected) {
-                    togglePoolCard(cardId);
-                  }
-                }}
+                onPointerDown={poolDrag.onPointerDown}
+                onPointerUp={poolDrag.onPointerUp}
+                onPointerLeave={poolDrag.onPointerLeave}
+                onPointerMove={poolDrag.onPointerMove}
               >
                 <For each={testCardPool()}>
                   {(card) => {
@@ -272,30 +267,43 @@ export function DebugPanel(props: DebugPanelProps) {
       </div>
 
       {/* 编辑器弹窗 */}
-      <Show when={showEnemyEditor()}>
+      <Show when={activePanel() === "enemyEditor"}>
         <EnemyEditor
           onSave={() => props.onCreateRunManager()}
-          onClose={() => setShowEnemyEditor(false)}
+          onClose={() => setActivePanel(null)}
         />
       </Show>
 
-      <Show when={showLevelEditor()}>
+      <Show when={activePanel() === "levelEditor"}>
         <LevelEditor
           onSave={() => props.onCreateRunManager()}
-          onClose={() => setShowLevelEditor(false)}
+          onClose={() => setActivePanel(null)}
         />
       </Show>
 
-      <Show when={showCardWeightEditor()}>
-        <OverlayPanel title="⚖️ 权重编辑" onClose={() => setShowCardWeightEditor(false)}>
+      <Show when={activePanel() === "cardWeights"}>
+        <OverlayPanel title="⚖️ 权重编辑" onClose={() => setActivePanel(null)}>
           <CardWeightEditor cardPool={testCardPool()} characterPool={props.characterPool} suggestedPairs={suggestedPairs()} />
         </OverlayPanel>
       </Show>
 
-      <Show when={showEventTestPanel()}>
-        <EventTestPanel
-          runManager={props.runManager}
-          onClose={() => setShowEventTestPanel(false)}
+      <Show when={activePanel() === "eventEditor"}>
+        <EventEditor
+          mode="standalone"
+          onSave={() => props.onCreateRunManager()}
+          onClose={() => setActivePanel(null)}
+          onTestEvent={(event) => {
+            props.onCreateRunManager();
+            ctrl().enterEvent(event, testChars(), () => {
+              // 事件确认后返回事件编辑器
+              props.onSetViewMode("home");
+              props.onSetDebugMode("off");
+              setActivePanel("eventEditor");
+            });
+            props.onSetDebugMode("manual");
+            props.onSetViewMode("game");
+            setActivePanel(null);
+          }}
         />
       </Show>
     </>

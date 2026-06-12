@@ -1,7 +1,10 @@
 import { createSignal, type Accessor, type Setter } from "solid-js";
-import type { EnemyConfig, RoguelikeConfig, CardWeightPair, EventDefinition } from "@gi-tcg/roguelike";
+import type { EnemyConfig, RoguelikeConfig, CardWeightPair, EventDefinition, CardWeightStorageAdapter, EnemyPool } from "@gi-tcg/roguelike";
+import { CardWeightManager } from "@gi-tcg/roguelike";
+export type { EnemyPool } from "@gi-tcg/roguelike";
 import defaultEnemies from "./config/enemies.json";
 import defaultLevels from "./config/levels.json";
+import { createBestStorage } from "./file-storage";
 
 // ============================================================
 // 存储接口
@@ -42,8 +45,6 @@ export class InMemoryAdapter implements ConfigStorage {
 // ============================================================
 // 配置存储类
 // ============================================================
-
-export type EnemyPool = { normal: EnemyConfig[]; elite: EnemyConfig[]; boss: EnemyConfig[] };
 
 const ENEMY_POOL_KEY = "gi-tcg-enemy-pool";
 const LEVEL_CONFIG_KEY = "gi-tcg-level-config";
@@ -125,6 +126,26 @@ export class ConfigStore {
     );
     this.events = ev;
     this._setEvents = setEv;
+  }
+
+  /**
+   * 创建一个带持久化的 CardWeightManager。
+   * 写操作自动同步到 configStore，无需手动 saveToStorage。
+   */
+  createCardWeightManager(): CardWeightManager {
+    const storage: CardWeightStorageAdapter = {
+      load: () => {
+        const data = this.cardWeights();
+        return (data.pairs ?? []).filter(
+          (p: any) => typeof p?.a === "number" && typeof p?.b === "number" && typeof p?.weight === "number"
+        );
+      },
+      save: (pairs: CardWeightPair[]) => {
+        this._setCardWeights({ version: 1, pairs });
+        this.storage.save(CARD_WEIGHTS_KEY, { version: 1, pairs });
+      },
+    };
+    return new CardWeightManager(undefined, storage);
   }
 
   // ---- 敌人池 ----
@@ -239,27 +260,7 @@ export class ConfigStore {
 // 默认实例（生产环境用 localStorage）
 // ============================================================
 
-export const configStore = new ConfigStore(new LocalStorageAdapter());
-
-// ============================================================
-// 向后兼容的函数导出
-// ============================================================
-
-export const getEnemyPool = () => configStore.enemyPool();
-export const setEnemyPoolConfig = (pool: EnemyPool) => configStore.setEnemyPool(pool);
-export const resetEnemyPool = () => configStore.resetEnemyPool();
-export const getLevelConfig = () => configStore.levelConfig();
-export const setLevelConfig = (config: RoguelikeConfig) => configStore.setLevelConfig(config);
-export const resetLevelConfig = () => configStore.resetLevelConfig();
-export const getCardWeights = () => configStore.getCardWeights();
-export const setCardWeights = (data: { version: number; pairs: CardWeightPair[] }) => configStore.setCardWeights(data);
-export const getCardCosts = () => configStore.cardCosts();
-export const setCardCosts = (costs: Record<number, number>) => configStore.setCardCosts(costs);
-export const getEvents = () => configStore.events();
-export const setEvents = (events: EventDefinition[]) => configStore.setEvents(events);
-export const exportAll = () => configStore.exportAll();
-export const importAll = () => configStore.importAll();
-export const resetAll = () => configStore.resetAll();
+export const configStore = new ConfigStore(createBestStorage());
 
 // ============================================================
 // JSON 文件工具（独立于 configStore）

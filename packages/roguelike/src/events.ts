@@ -20,81 +20,128 @@ import type {
   EventEffectType,
   RoguelikeRun,
 } from "./types";
-import { rollCards } from "./card-pool";
-import { getCardName } from "./utils";
+import { getCardName, sample } from "./utils";
+import { FALLBACK_EVENT_ID } from "./data";
+import { CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS } from "./event-descriptors";
+
+// ============================================================
+// 共享常量
+// ============================================================
+
+/** 卡牌标签中文映射（用于效果描述和编辑器 UI） */
+export const CARD_TAG_LABELS: Record<string, string> = {
+  weapon: "武器", artifact: "圣遗物", place: "场地", ally: "伙伴",
+  item: "道具", blessing: "元素助佑", food: "料理", talent: "天赋",
+  eventCard: "事件牌", secret: "秘传",
+};
 
 // ============================================================
 // 条件评估
 // ============================================================
 
-/** 评估单个条件是否满足 */
-function evaluateCondition(
+/**
+ * 获取条件的匹配数量（用于权重缩放）。
+ * 对于有计数意义的条件返回实际匹配数，否则返回 0 或 1。
+ */
+function getMatchCount(
   cond: EventConditionType,
   run: RoguelikeRun,
   data: GameData,
-): boolean {
+): number {
   switch (cond.type) {
-    case "hasCard": {
-      const count = run.deck.filter((id) => id === cond.cardId).length;
-      return count >= (cond.minCount ?? 1);
-    }
-    case "hasCharacterTag": {
-      const count = run.characters.filter((charId) => {
+    case "hasCard":
+      return run.deck.filter((id) => id === cond.cardId).length;
+    case "hasAnyCards":
+      return cond.cardIds.some((cardId) => run.deck.includes(cardId)) ? 1 : 0;
+    case "hasCharacterTag":
+      return run.characters.filter((charId) => {
         const char = data.characters.get(charId);
         return char?.tags.some((t) => String(t) === cond.tag);
       }).length;
-      return count >= (cond.minCount ?? 1);
-    }
     case "hasCharacter":
-      return run.characters.includes(cond.characterId);
+      return run.characters.includes(cond.characterId) ? 1 : 0;
+    case "hasAllCharacters":
+      return cond.characterIds.every((id) => run.characters.includes(id)) ? 1 : 0;
+    case "noCharacter":
+      return !run.characters.includes(cond.characterId) ? 1 : 0;
     case "defeatedEnemy":
-      // 检查已完成的遭遇中是否包含指定敌人
       return run.path.some(
         (node) =>
           node.completed &&
           node.encounters.some((enc) =>
             enc.configs.some((cfg) => cfg.characterId === cond.enemyId),
           ),
-      );
+      ) ? 1 : 0;
     case "floorAtLeast":
-      return run.floor >= cond.floor;
+      return run.floor >= cond.floor ? 1 : 0;
     case "currencyAtLeast":
-      return run.currency >= cond.amount;
+      return run.currency >= cond.amount ? 1 : 0;
     case "deckSizeAtLeast":
-      return run.deck.length >= cond.count;
+      return run.deck.length >= cond.count ? 1 : 0;
     case "teamSizeAtLeast":
-      return run.characters.length >= cond.count;
+      return run.characters.length >= cond.count ? 1 : 0;
+    case "teamSizeAtMost":
+      return run.characters.length <= cond.count ? 1 : 0;
+    case "teamOnlyElements": {
+      if (run.characters.length === 0) return 0;
+      const allMatch = run.characters.every((charId) => {
+        const char = data.characters.get(charId);
+        return char?.tags.some((t) => cond.elements.includes(String(t)));
+      });
+      return allMatch ? 1 : 0;
+    }
     case "anyEventCompleted":
-      return cond.eventIds.some((id) => run.completedEventIds.includes(id));
+      return cond.eventIds.some((id) => run.completedEventIds.includes(id)) ? 1 : 0;
     case "noEventCompleted":
-      return !cond.eventIds.some((id) => run.completedEventIds.includes(id));
+      return !cond.eventIds.some((id) => run.completedEventIds.includes(id)) ? 1 : 0;
   }
 }
 
-/** 计算事件的总权重（所有条件都满足时累加权重，否则返回 0） */
+/**
+ * 计算事件的总权重。
+ *
+ * 算法：根据 conditionMode 决定 AND/OR 逻辑 + 匹配数量缩放
+ * - "or"（默认）：任意条件满足即为候选，满足的条件权重累加
+ * - "and"：所有条件必须满足才为候选
+ * - 使用 log2(matchCount + 1) 作为缩放因子，提供递减收益
+ */
 export function evaluateEventWeight(
   event: EventDefinition,
   run: RoguelikeRun,
   data: GameData,
 ): number {
   if (event.conditions.length === 0) return 1;
+
+  const mode = event.conditionMode ?? "or";
   let totalWeight = 0;
+  let anyMet = false;
+
   for (const cond of event.conditions) {
-    if (!evaluateCondition(cond.condition, run, data)) {
+    const count = getMatchCount(cond.condition, run, data);
+    const threshold = ("minCount" in cond.condition && cond.condition.minCount)
+      ? cond.condition.minCount : 1;
+    if (count >= threshold) {
+      anyMet = true;
+      const scale = Math.max(1, Math.log2(count + 1));
+      totalWeight += cond.weight * scale;
+    } else if (mode === "and") {
+      // AND 模式：任一不满足 → 事件不可用
       return 0;
     }
-    totalWeight += cond.weight;
   }
-  return Math.max(totalWeight, 1);
+
+  return anyMet ? Math.max(totalWeight, 1) : 0;
 }
 
-/** 获取所有满足条件的事件及其权重 */
+/** 获取所有满足条件且未完成的事件及其权重（排除回退事件） */
 export function getEligibleEvents(
   events: EventDefinition[],
   run: RoguelikeRun,
   data: GameData,
 ): { event: EventDefinition; weight: number }[] {
+  const completed = new Set(run.completedEventIds);
   return events
+    .filter((event) => event.id !== FALLBACK_EVENT_ID && !completed.has(event.id))
     .map((event) => ({ event, weight: evaluateEventWeight(event, run, data) }))
     .filter((e) => e.weight > 0);
 }
@@ -201,39 +248,10 @@ function applySingleEffect(
       });
       break;
     }
-    case "addRandomCards": {
-      const cards = rollCards(effect.count, {
-        data,
-        characterIds: run.characters,
-        floor: run.floor,
-        deck: run.deck,
-      });
-      for (const card of cards) {
-        run.deck.push(card.cardId);
-      }
-      break;
-    }
     case "modifyCharacterMaxHp": {
       // 注意：这里修改的是运行时角色的 maxHp 变量
       // 实际实现需要在战斗初始化时读取这个值
       // 目前通过在 run 上记录修正值来实现
-      if (!run.characterHpModifiers) {
-        run.characterHpModifiers = {};
-      }
-      if (effect.characterId) {
-        const current = run.characterHpModifiers[effect.characterId] ?? 0;
-        run.characterHpModifiers[effect.characterId] = current + effect.amount;
-      } else {
-        for (const charId of run.characters) {
-          const current = run.characterHpModifiers[charId] ?? 0;
-          run.characterHpModifiers[charId] = current + effect.amount;
-        }
-      }
-      break;
-    }
-    case "healCharacter": {
-      // 治疗效果需要在战斗中实现，这里记录到 modifiers
-      // 正数 amount = 治疗
       if (!run.characterHpModifiers) {
         run.characterHpModifiers = {};
       }
@@ -253,13 +271,37 @@ function applySingleEffect(
         run.characters = [...run.characters, effect.characterId];
       }
       break;
-    case "modifyNextEnemyHp":
-      run.nextEnemyHpModifier += effect.amount;
+    case "modifyNextBattleAllyHp":
+      run.nextBattleAllyHpModifier += effect.amount;
       break;
-    case "skipNextNode":
-      // 标记跳过下一个节点（在 confirmEvent 中处理）
-      run.skipNextNode = true;
+    case "modifyNextBattleEnemyHp":
+      run.nextBattleEnemyHpModifier += effect.amount;
       break;
+    case "skipNextNormalBattle":
+      run.skipNextNormalBattle = true;
+      break;
+    case "chooseAndRemoveCard":
+      // 标记需要选择删除卡牌（在 UI 层处理）
+      run.pendingChooseAndRemoveCard = true;
+      break;
+    case "randomCard": {
+      // 从 GameData 中按标签筛选卡牌，随机选取
+      const count = effect.count ?? 1;
+      const candidates: number[] = [];
+      for (const [id, def] of data.entities) {
+        if (def.type === "status" || def.type === "combatStatus" || def.type === "summon") continue;
+        const tags = def.tags as string[] | undefined;
+        if (!tags?.includes(effect.tag)) continue;
+        candidates.push(id);
+      }
+      if (candidates.length > 0) {
+        const picked = sample(candidates, count);
+        for (const cardId of picked) {
+          run.deck.push(cardId);
+        }
+      }
+      break;
+    }
   }
 }
 
@@ -268,62 +310,13 @@ function applySingleEffect(
 // ============================================================
 
 /** 获取事件效果的简短描述（用于 UI 显示） */
-export function getEffectDescription(effect: EventEffectType, data: GameData): string {
-  switch (effect.type) {
-    case "addCurrency":
-      return `获得 ${effect.amount} 费用`;
-    case "removeCurrency":
-      return `失去 ${effect.amount} 费用`;
-    case "addCard": {
-      const name = getCardName(effect.cardId);
-      return `获得 ${name}${(effect.count ?? 1) > 1 ? ` ×${effect.count}` : ""}`;
-    }
-    case "removeCard": {
-      const name = getCardName(effect.cardId);
-      return `移除 ${name}${(effect.count ?? 1) > 1 ? ` ×${effect.count}` : ""}`;
-    }
-    case "addRandomCards":
-      return `获得 ${effect.count} 张随机卡牌`;
-    case "modifyCharacterMaxHp":
-      return `${effect.amount > 0 ? "+" : ""}${effect.amount} 角色生命上限`;
-    case "healCharacter":
-      return `恢复 ${effect.amount} 生命`;
-    case "addCharacter": {
-      return `获得角色：${getCardName(effect.characterId)}`;
-    }
-    case "modifyNextEnemyHp":
-      return `下一个敌人 HP ${effect.amount > 0 ? "+" : ""}${effect.amount}`;
-    case "skipNextNode":
-      return "跳过下一个节点";
-  }
+export function getEffectDescription(effect: EventEffectType, _data: GameData): string {
+  const desc = EFFECT_DESCRIPTORS[effect.type];
+  return desc?.describe(effect) ?? `[${effect.type}]`;
 }
 
 /** 获取条件的简短描述（用于编辑器显示） */
-export function getConditionDescription(cond: EventConditionType, data: GameData): string {
-  switch (cond.type) {
-    case "hasCard": {
-      const name = getCardName(cond.cardId);
-      return `卡组中有 ${name}${(cond.minCount ?? 1) > 1 ? ` ×${cond.minCount}` : ""}`;
-    }
-    case "hasCharacterTag":
-      return `队伍中有 ${cond.minCount ?? 1} 个 ${cond.tag} 角色`;
-    case "hasCharacter": {
-      return `队伍中有 ${getCardName(cond.characterId)}`;
-    }
-    case "defeatedEnemy": {
-      return `已击败 ${getCardName(cond.enemyId)}`;
-    }
-    case "floorAtLeast":
-      return `到达第 ${cond.floor} 层`;
-    case "currencyAtLeast":
-      return `费用 ≥ ${cond.amount}`;
-    case "deckSizeAtLeast":
-      return `卡组 ≥ ${cond.count} 张`;
-    case "teamSizeAtLeast":
-      return `队伍 ≥ ${cond.count} 人`;
-    case "anyEventCompleted":
-      return `已完成事件：${cond.eventIds.join(", ")}`;
-    case "noEventCompleted":
-      return `未完成事件：${cond.eventIds.join(", ")}`;
-  }
+export function getConditionDescription(cond: EventConditionType, _data: GameData): string {
+  const desc = CONDITION_DESCRIPTORS[cond.type];
+  return desc?.describe(cond) ?? `[${cond.type}]`;
 }

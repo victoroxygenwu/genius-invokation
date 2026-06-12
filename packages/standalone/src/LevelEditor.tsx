@@ -1,19 +1,20 @@
 import { For, Show, createSignal } from "solid-js";
 import {
   getCardName, generateFloorPath, sample,
-  type RoguelikeConfig, type FloorConfig, type NodeType, type EnemyConfig, type EventDefinition,
+  type RoguelikeConfig, type FloorConfig, type NodeType, type EnemyConfig, type EventDefinition, type EnemyPool,
 } from "@gi-tcg/roguelike";
-import { getLevelConfig, setLevelConfig, getEnemyPool, setEnemyPoolConfig, configStore, exportJson, importJson } from "./configStore";
+import { configStore } from "./configStore";
 import { NODE_INFO } from "./nodeInfo";
 import { EnemyEditor } from "./EnemyEditor";
 import { EventEditor } from "./EventEditor";
 import { OverlayPanel } from "./OverlayPanel";
+import { EntityGrid } from "./EntityGrid";
+import { EditorToolbar } from "./EditorToolbar";
 import { SafeImage } from "./SafeImage";
 import { NumberInput } from "./NumberInput";
-import type { EnemyPool } from "./configStore";
 
 interface PathNodeCfg { type: NodeType; encounters: EnemyConfig[][] | null; }
-interface FloorCfgEx { floor: number; path: PathNodeCfg[]; }
+interface FloorCfgEx { floor: number; path: PathNodeCfg[]; fixedEventIds?: (number | null)[]; }
 
 /** 对 null 遭遇使用与游戏相同的 generateFloorPath 预生成 */
 function prefillEncounters(fc: FloorConfig, pool: EnemyPool): FloorCfgEx {
@@ -33,23 +34,22 @@ function prefillEncounters(fc: FloorConfig, pool: EnemyPool): FloorCfgEx {
       type: t,
       encounters: pathNodes[i]?.encounters?.map((enc) => enc.configs) ?? null,
     })),
+    fixedEventIds: fc.fixedEventIds,
   };
 }
 
 /** 敌人卡片选择器 — 缩略图 + 名称 */
 function EnemyPicker(p: { selected: number; pool: EnemyConfig[]; onChange: (id: number) => void }) {
+  const items = () => p.pool.map((en) => ({ id: en.characterId, name: getCardName(en.characterId) }));
   return (
-    <div class="card-grid le-enemy-picker">
-      <For each={p.pool}>{(en) => (
-        <button
-          class={`card-item le-enemy-card ${p.selected === en.characterId ? "le-enemy-card-selected" : ""}`}
-          onClick={() => p.onChange(en.characterId)}
-        >
-          <SafeImage entityId={en.characterId} alt={getCardName(en.characterId)} />
-          <span>{getCardName(en.characterId)}</span>
-        </button>
-      )}</For>
-    </div>
+    <EntityGrid
+      items={items()}
+      mode="single"
+      selected={p.selected}
+      onChange={p.onChange}
+      class="le-enemy-picker"
+      itemClass="le-enemy-card"
+    />
   );
 }
 
@@ -64,11 +64,16 @@ function getTemplateFromPool(pool: EnemyConfig[], characterId: number): EnemyCon
 function EncounterEditor(p: {
   configs: EnemyConfig[];
   pool: EnemyConfig[];
+  nodeType: NodeType;
   onUpdate: (configs: EnemyConfig[]) => void;
   onRemove: () => void;
   onEditEnemy: (index: number) => void;
   label?: string;
 }) {
+  const ep = configStore.enemyPool();
+  const typePool = p.nodeType === "normal" ? ep.normal : p.nodeType === "elite" ? ep.elite : ep.boss;
+  const typePoolIds = new Set(typePool.map((c) => c.characterId));
+  const hasTypeMatch = () => p.configs.some((c) => c.characterId > 0 && typePoolIds.has(c.characterId));
   const addEnemy = () => {
     // 添加占位配置，选择敌人时会从模板读取
     const placeholder: EnemyConfig = { characterId: 0, hpOverride: null, currencyReward: null, modifiers: [] };
@@ -114,6 +119,9 @@ function EncounterEditor(p: {
       <Show when={p.configs.some((c) => c.characterId === 0)}>
         <div class="le-encounter-pick-hint">点击上方卡片选择敌人</div>
       </Show>
+      <Show when={p.configs.length > 0 && !hasTypeMatch()}>
+        <div class="le-encounter-warning">⚠️ 至少需要一个{p.nodeType === "elite" ? "精英" : "Boss"}敌人</div>
+      </Show>
     </div>
   );
 }
@@ -128,14 +136,28 @@ function FloorRow(p: {
   onEditEnemy: (floorIdx: number, nodeIdx: number, encIdx: number, enemyIdx: number) => void;
   onEditEvent: (floorIdx: number, nodeIdx: number) => void;
 }) {
+  /** 第一层第一个节点（事件节点）不可删除 */
+  const isNodeFixed = (nodeIdx: number) => p.floorIndex === 0 && nodeIdx === 0;
   // 直接读取信号，确保响应式追踪
-  const poolFor = (t: NodeType): EnemyConfig[] => {
+  /** 获取节点同类型敌人池（用于初始随机） */
+  const typePoolFor = (t: NodeType): EnemyConfig[] => {
     const ep = configStore.enemyPool();
-    if (t === "normal") return ep.normal; if (t === "elite") return ep.elite; if (t === "boss") return ep.boss;
+    if (t === "normal") return ep.normal;
+    if (t === "elite") return ep.elite;
+    if (t === "boss") return ep.boss;
     return [];
   };
-  /** 创建默认遭遇：使用与游戏相同的 sample 函数从池子选取 */
-  const defaultConfigs = (pool: EnemyConfig[]): EnemyConfig[] => {
+  /** 获取节点可用的敌人池（含跨类型，用于手动选择） */
+  const poolFor = (t: NodeType): EnemyConfig[] => {
+    const ep = configStore.enemyPool();
+    if (t === "normal") return ep.normal;
+    if (t === "elite") return [...ep.normal, ...ep.elite];
+    if (t === "boss") return [...ep.normal, ...ep.elite, ...ep.boss];
+    return [];
+  };
+  /** 创建默认遭遇：只从同类型池子随机选取 */
+  const defaultConfigs = (nodeType: NodeType): EnemyConfig[] => {
+    const pool = typePoolFor(nodeType);
     if (pool.length === 0) return [{ characterId: 0, hpOverride: null, currencyReward: null, modifiers: [] }];
     return sample(pool, 1).map((c) => ({ ...c }));
   };
@@ -149,23 +171,28 @@ function FloorRow(p: {
       <div class="le-floor-nodes">
         <For each={p.cfg.path}>{(node, ni) => {
           const pool = poolFor(node.type);
-          const encs = node.encounters ?? [defaultConfigs(pool)];
+          const encs = node.encounters ?? [defaultConfigs(node.type)];
           return (
             <div class="le-node">
               <div class="le-node-header">
                 <span class="le-node-type">{NODE_INFO[node.type].icon} {NODE_INFO[node.type].name}</span>
-                <button class="ee-btn-delete" onClick={() => p.onUpdate({ ...p.cfg, path: p.cfg.path.filter((_, i) => i !== ni()) })} style={{ position: "static" }}>✕</button>
+                <Show when={!isNodeFixed(ni())}>
+                  <button class="ee-btn-delete" onClick={() => p.onUpdate({ ...p.cfg, path: p.cfg.path.filter((_, i) => i !== ni()) })} style={{ position: "static" }}>✕</button>
+                </Show>
+                <Show when={isNodeFixed(ni())}>
+                  <span class="le-node-fixed-hint">🔒 固定</span>
+                </Show>
               </div>
               <Show when={node.type !== "shop" && node.type !== "event"}>
                 <div class="le-node-encounters">
                   <For each={encs}>{(configs, ei) => (
-                    <EncounterEditor configs={configs} pool={pool}
+                    <EncounterEditor configs={configs} pool={pool} nodeType={node.type}
                       onUpdate={(nc) => { const np = [...p.cfg.path]; const ne = [...(np[ni()].encounters ?? encs)]; ne[ei()] = nc; np[ni()] = { ...np[ni()], encounters: ne }; p.onUpdate({ ...p.cfg, path: np }); }}
                       onRemove={() => { const np = [...p.cfg.path]; const ne = [...(np[ni()].encounters ?? encs)]; ne.splice(ei(), 1); np[ni()] = { ...np[ni()], encounters: ne.length > 0 ? ne : null }; p.onUpdate({ ...p.cfg, path: np }); }}
                       onEditEnemy={(enemyIdx) => p.onEditEnemy(p.floorIndex, ni(), ei(), enemyIdx)}
                     />
                   )}</For>
-                  <button class="editor-btn-add-enc" onClick={() => { const np = [...p.cfg.path]; np[ni()] = { ...np[ni()], encounters: [...(np[ni()].encounters ?? encs), defaultConfigs(pool)] }; p.onUpdate({ ...p.cfg, path: np }); }}>+ 添加遭遇</button>
+                  <button class="editor-btn-add-enc" onClick={() => { const np = [...p.cfg.path]; np[ni()] = { ...np[ni()], encounters: [...(np[ni()].encounters ?? encs), defaultConfigs(node.type)] }; p.onUpdate({ ...p.cfg, path: np }); }}>+ 添加遭遇</button>
                 </div>
               </Show>
               <Show when={node.type === "event"}>
@@ -197,12 +224,16 @@ function FloorRow(p: {
 }
 
 export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
-  const cfg = getLevelConfig();
-  const pool = getEnemyPool();
+  const cfg = configStore.levelConfig();
+  const pool = configStore.enemyPool();
   // 从 FloorConfig 加载，对 null 遭遇使用与游戏相同的 generateFloorPath 预生成
   const toEx = (fc: FloorConfig): FloorCfgEx => prefillEncounters(fc, pool);
 
   const initialFloors = cfg.floors.map(toEx);
+  // 确保第一层第一个节点固定为事件节点
+  if (initialFloors.length > 0 && initialFloors[0].path.length > 0 && initialFloors[0].path[0].type !== "event") {
+    initialFloors[0].path[0] = { type: "event", encounters: null };
+  }
   const [floors, setFloors] = createSignal(initialFloors);
 
   // 如果有 null 遭遇被预生成，自动保存到 configStore（确保测试流程使用相同数据）
@@ -213,6 +244,7 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
         floor: f.floor,
         path: f.path.map((n) => n.type),
         encounters: f.path.map((n) => n.encounters ?? null),
+        fixedEventIds: f.fixedEventIds,
       })),
       initialCurrency: cfg.initialCurrency,
       shopCardCount: cfg.shopCardCount,
@@ -221,7 +253,7 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
       interestRate: cfg.interestRate,
       events: cfg.events ?? [],
     };
-    setLevelConfig(autoSaveConfig);
+    configStore.setLevelConfig(autoSaveConfig);
   }
   const [initialCurrency, setInitialCurrency] = createSignal(cfg.initialCurrency);
   const [shopCardCount, setShopCardCount] = createSignal(cfg.shopCardCount);
@@ -242,20 +274,21 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
 
   const updateFloor = (i: number, f: FloorCfgEx) => { const l = [...floors()]; l[i] = f; setFloors(l); };
   const removeFloor = (i: number) => setFloors(floors().filter((_, idx) => idx !== i));
-  const addFloor = () => { const last = floors()[floors().length - 1]; setFloors([...floors(), { floor: (last?.floor ?? 0) + 1, path: [{ type: "normal", encounters: null }, { type: "normal", encounters: null }, { type: "elite", encounters: null }, { type: "shop", encounters: null }, { type: "boss", encounters: null }] }]); };
+  const addFloor = () => { const last = floors()[floors().length - 1]; setFloors([...floors(), { floor: (last?.floor ?? 0) + 1, path: [{ type: "normal", encounters: null }, { type: "event", encounters: null }, { type: "elite", encounters: null }, { type: "shop", encounters: null }, { type: "boss", encounters: null }] }]); };
 
   const buildConfig = (): RoguelikeConfig => ({
     floors: floors().map((f) => ({
       floor: f.floor,
       path: f.path.map((n) => n.type),
       encounters: f.path.map((n) => n.encounters ?? null),
+      fixedEventIds: f.fixedEventIds,
     })),
     initialCurrency: initialCurrency(), shopCardCount: shopCardCount(), rewardCardCount: rewardCardCount(),
     interestThreshold: interestThreshold(), interestRate: interestRate(),
     events: configStore.events(),
   });
 
-  const doSave = () => { setLevelConfig(buildConfig()); p.onSave(); p.onClose(); };
+  const doSave = () => { configStore.setLevelConfig(buildConfig()); p.onSave(); p.onClose(); };
 
   /** 打开子编辑器编辑特定怪物 */
   const openEnemyEditor = (floorIdx: number, nodeIdx: number, encIdx: number, enemyIdx: number) => {
@@ -289,7 +322,7 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
 
     // 如果怪物未锁定，写回全局怪物池
     // 同时检查池子中原始条目的锁定状态，防止锁定怪物被意外覆盖
-    const currentPool = getEnemyPool();
+    const currentPool = configStore.enemyPool();
     const charId = updatedConfig.characterId;
     const isLockedInPool =
       currentPool.normal.some((c) => c.characterId === charId && c.locked) ||
@@ -305,7 +338,7 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
         }
         return list;
       };
-      setEnemyPoolConfig({
+      configStore.setEnemyPool({
         normal: findAndUpdate(currentPool.normal),
         elite: findAndUpdate(currentPool.elite),
         boss: findAndUpdate(currentPool.boss),
@@ -329,11 +362,32 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
   return (
     <>
       <OverlayPanel title="🗺️ 关卡编辑" onClose={p.onClose}
-        titleActions={<>
-          <button class="editor-btn" onClick={async () => { const d = await importJson<RoguelikeConfig>(); if (d) { if (d.floors) setFloors(d.floors.map(toEx)); if (d.initialCurrency !== undefined) setInitialCurrency(d.initialCurrency); if (d.shopCardCount !== undefined) setShopCardCount(d.shopCardCount); if (d.rewardCardCount !== undefined) setRewardCardCount(d.rewardCardCount); if (d.interestThreshold !== undefined) setInterestThreshold(d.interestThreshold); if (d.interestRate !== undefined) setInterestRate(d.interestRate); } }}>导入</button>
-          <button class="editor-btn" onClick={() => exportJson(buildConfig(), "level-config.json")}>导出</button>
-          <button class="editor-btn editor-btn-save" onClick={doSave}>保存</button>
-        </>}
+        titleActions={
+          <EditorToolbar
+            filename="level-config.json"
+            getData={buildConfig}
+            onImport={(d: RoguelikeConfig) => {
+              if (d.floors) setFloors(d.floors.map(toEx));
+              if (d.initialCurrency !== undefined) setInitialCurrency(d.initialCurrency);
+              if (d.shopCardCount !== undefined) setShopCardCount(d.shopCardCount);
+              if (d.rewardCardCount !== undefined) setRewardCardCount(d.rewardCardCount);
+              if (d.interestThreshold !== undefined) setInterestThreshold(d.interestThreshold);
+              if (d.interestRate !== undefined) setInterestRate(d.interestRate);
+            }}
+            onReset={() => {
+              configStore.resetLevelConfig();
+              const d = configStore.levelConfig();
+              setFloors(d.floors.map(toEx));
+              setInitialCurrency(d.initialCurrency);
+              setShopCardCount(d.shopCardCount);
+              setRewardCardCount(d.rewardCardCount);
+              setInterestThreshold(d.interestThreshold);
+              setInterestRate(d.interestRate);
+            }}
+          >
+            <button class="editor-btn editor-btn-save" onClick={doSave}>保存</button>
+          </EditorToolbar>
+        }
       >
         <>
           <div class="le-section">

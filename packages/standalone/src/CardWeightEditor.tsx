@@ -13,23 +13,20 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { For, Show, createMemo, createSignal, onMount } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import {
   getCardName,
-  getDirectCardWeight,
-  setCardWeight,
-  getAllWeightPairs,
-  loadPairs,
   snapWeight,
   pairKey,
+  CardWeightManager,
   type SuggestedPair,
 } from "@gi-tcg/roguelike";
 import {
-  getCardWeights, setCardWeights,
   configStore,
   exportJson, importJson,
 } from "./configStore";
 import { SafeImage } from "./SafeImage";
+import { useDragSelect } from "./useDragSelect";
 
 export interface CardWeightEditorProps {
   cardPool: { cardId: number; name: string }[];
@@ -111,30 +108,12 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   // 批量调节：当前拖拽值
   const [batchValue, setBatchValue] = createSignal(0.5);
 
-  /** 保存当前配置到 localStorage */
-  const saveToStorage = () => {
-    setCardWeights({ version: 1, pairs: getAllWeightPairs() });
-  };
+  // 创建带持久化的管理器（构造时自动从 configStore 加载，写操作自动持久化）
+  const manager = configStore.createCardWeightManager();
 
-  /** 从 localStorage 加载配置 */
-  const loadFromStorage = () => {
-    const config = getCardWeights();
-    if (!config.pairs || !Array.isArray(config.pairs)) return;
-    const valid = config.pairs.filter((p: any) =>
-      typeof p?.a === "number" && typeof p?.b === "number" && typeof p?.weight === "number"
-    );
-    loadPairs(valid);
-  };
-
-  // 组件挂载时加载保存的配置
-  onMount(() => {
-    loadFromStorage();
-  });
-
-  /** 修改权重并自动保存 */
+  /** 修改权重（自动持久化） */
   const saveWeight = (a: number, b: number, weight: number) => {
-    setCardWeight(a, b, weight);
-    saveToStorage();
+    manager.setCardWeight(a, b, weight);
   };
 
   const sortedCards = createMemo(() => {
@@ -147,10 +126,10 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     return [...actions, ...chars];
   });
 
-  /** 单次获取所有手动对（避免 3 个 memo 各自调用 getAllWeightPairs） */
+  /** 单次获取所有手动对（依赖 configStore 信号触发重读） */
   const allWeightPairs = createMemo(() => {
-    configStore.cardWeights();
-    return getAllWeightPairs();
+    configStore.cardWeights(); // 依赖信号以响应持久化
+    return manager.getAllWeightPairs();
   });
 
   /** 未被采纳/忽略的建议（共享过滤逻辑） */
@@ -240,7 +219,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     } else {
       // 添加模式：切换关联
       if (main === cardId) return;
-      const existing = getDirectCardWeight(main, cardId);
+      const existing = manager.getDirectCardWeight(main, cardId);
       saveWeight(main, cardId, existing > 0 ? 0 : 0.5);
     }
   };
@@ -249,13 +228,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     saveWeight(mainCard(), cardId, value);
   };
 
-  /** 批量调节：实时预览（不保存） */
+  /** 批量调节：实时预览（自动持久化） */
   const applyBatchPreview = (value: number) => {
     const sel = selectedCards();
+    manager.beginBatch();
     for (const r of relatedCards()) {
-      if (sel.has(r.id)) setCardWeight(mainCard(), r.id, value);
+      if (sel.has(r.id)) manager.setCardWeight(mainCard(), r.id, value);
     }
-    configStore.setCardWeights({ version: 1, pairs: getAllWeightPairs() });
+    manager.endBatch();
   };
 
   /** 切换多选状态 */
@@ -289,16 +269,27 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
   /** 确认批量调节 */
   const acceptBatch = () => {
-    saveToStorage();
+    // 已通过 applyBatchPreview 自动持久化
     exitMultiSelect();
   };
 
   /** 撤销批量调节 */
   const rejectBatch = () => {
     const orig = batchOriginals();
-    for (const [id, weight] of orig) setCardWeight(mainCard(), id, weight);
-    saveToStorage();
+    manager.beginBatch();
+    for (const [id, weight] of orig) manager.setCardWeight(mainCard(), id, weight);
+    manager.endBatch();
     exitMultiSelect();
+  };
+
+  /** 通过 elementFromPoint 从 pointer 事件获取卡牌 ID（排除滑块/数字输入） */
+  const getCardIdFromPointer = (e: PointerEvent): number | null => {
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (!el) return null;
+    if (el.closest(".pve-weight-slider, .pve-weight-num-input")) return null;
+    const item = el.closest("[data-card-id]") as HTMLElement | null;
+    if (!item) return null;
+    return Number(item.dataset.cardId) || null;
   };
 
   /** 退出多选模式 */
@@ -319,12 +310,33 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     setBatchValue(snapWeight(median));
   };
 
+  // 顶部网格拖拽：添加模式下批量添加/取消关联
+  const gridDrag = useDragSelect({
+    guard: () => mode() === "add" && mainCard() !== 0,
+    resolveId: getCardIdFromPointer,
+    excludeId: mainCard,
+    isSelected: (id) => manager.getDirectCardWeight(mainCard(), id) > 0,
+    toggle: (id) => {
+      const main = mainCard();
+      const existing = manager.getDirectCardWeight(main, id);
+      saveWeight(main, id, existing > 0 ? 0 : 0.5);
+    },
+  });
+
+  // 下方列表拖拽：多选模式下批量选中/取消
+  const listDrag = useDragSelect({
+    guard: () => multiSelectMode(),
+    resolveId: getCardIdFromPointer,
+    isSelected: (id) => selectedCards().has(id),
+    toggle: toggleSelect,
+  });
+
   const removeRelation = (cardId: number) => {
     saveWeight(mainCard(), cardId, 0);
   };
 
   const acceptSuggestion = (pair: SuggestedPair) => {
-    saveWeight(pair.a, pair.b, effectiveWeight(pair));
+    manager.setCardWeight(pair.a, pair.b, effectiveWeight(pair));
   };
 
   const dismissSuggestion = (pair: SuggestedPair) => {
@@ -342,8 +354,9 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   const acceptCategory = (category: string) => {
     const pairs = groupedSuggestions()[category] ?? [];
     const w = configStore.categoryWeights()[category] ?? pairs[0]?.weight ?? 0.5;
-    for (const p of pairs) setCardWeight(p.a, p.b, w);
-    saveToStorage();
+    manager.beginBatch();
+    for (const p of pairs) manager.setCardWeight(p.a, p.b, w);
+    manager.endBatch();
   };
 
   /** 导出当前配置为 JSON 文件下载 */
@@ -359,8 +372,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
       alert("无效的配置文件");
       return;
     }
-    loadPairs(config.pairs);
-    saveToStorage();
+    manager.loadPairs(config.pairs);
   };
 
   return (
@@ -369,7 +381,8 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
       <div class="pve-weight-io-bar">
         <button onClick={exportConfig} class="editor-btn">导出</button>
         <button onClick={importConfig} class="editor-btn">导入</button>
-        <button onClick={() => { saveToStorage(); alert("已保存到本地存储"); }} class="editor-btn editor-btn-save">保存</button>
+        <button onClick={() => { if (confirm("确定要重置为预设数据吗？当前修改将丢失。")) manager.resetToDefault(); }} class="editor-btn">重置预设</button>
+        <button onClick={() => { alert("已自动保存到本地存储"); }} class="editor-btn editor-btn-save">保存</button>
       </div>
 
       <Show when={mainCard() !== 0}>
@@ -391,7 +404,12 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         <p class="pve-weight-hint">点击一张卡牌作为关联主体</p>
       </Show>
 
-      <div class="card-grid pve-weight-grid">
+      <div class="card-grid pve-weight-grid"
+        onPointerDown={gridDrag.onPointerDown}
+        onPointerUp={gridDrag.onPointerUp}
+        onPointerLeave={gridDrag.onPointerLeave}
+        onPointerMove={gridDrag.onPointerMove}
+      >
         <For each={sortedCards()}>
           {(card) => {
             const rel = () => relatedMap().get(card.id);
@@ -406,6 +424,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
             return (
               <button
                 class={`card-item pve-weight-card ${st() === "main" ? "pve-weight-card-main" : ""} ${st() === "related-manual" ? "card-item-selected pve-weight-card-selected" : ""} ${st() === "related-suggested" ? "pve-weight-card-suggested" : ""}`}
+                data-card-id={card.id}
                 onClick={() => onCardClick(card.id)}
               >
                 <SafeImage entityId={card.id} alt={card.name} loading="lazy" />
@@ -453,15 +472,21 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
           </div>
         </Show>
 
-        <div class="pve-weight-rel-list">
+        <div class="pve-weight-rel-list"
+          onPointerDown={listDrag.onPointerDown}
+          onPointerUp={listDrag.onPointerUp}
+          onPointerLeave={listDrag.onPointerLeave}
+          onPointerMove={listDrag.onPointerMove}
+        >
           <For each={relatedCards()}>
             {(rel) => (
-              <div class={`pve-weight-rel-item${selectedCards().has(rel.id) ? " pve-weight-rel-selected" : ""}`}>
+              <div class={`pve-weight-rel-item${selectedCards().has(rel.id) ? " pve-weight-rel-selected" : ""}`}
+                data-card-id={rel.id}
+              >
                 <Show when={multiSelectMode()}>
                   <input
                     type="checkbox"
                     checked={selectedCards().has(rel.id)}
-                    onInput={() => toggleSelect(rel.id)}
                     class="pve-weight-rel-check"
                   />
                 </Show>
