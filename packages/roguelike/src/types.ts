@@ -13,29 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-export type ScriptedAction =
-  | { type: "useSkill"; skillId: number }
-  | { type: "playCard"; cardIndex: number }
-  | { type: "switchActive"; targetId: number }
-  | { type: "elementalTuning" }
-  | { type: "declareEnd" };
-
-export interface BehaviorRule {
-  actions: ScriptedAction[];
-}
-
-export interface CharacterBehavior {
-  characterId: number;
-  rules: BehaviorRule[];
-}
-
-export interface EnemyScript {
-  name: string;
-  characters: number[];
-  cards: number[];
-  behaviors: CharacterBehavior[];
-}
-
 // ============================================================
 // 敌人配置与修饰器
 // ============================================================
@@ -45,7 +22,6 @@ export type EnemyModifierType =
   | "revive"               // 多命复活（倒下后复活至满血）
   | "damageReduction"      // 受到伤害 -N（可配置数值）
   | "damageBoost"          // 造成伤害 +N（可配置数值）
-  | "elementalImmunity"    // 元素伤害免疫
   | "innateTalent"         // 开局拥有自身的天赋
   | "fullEnergy"           // 开局满能量
   | "supportCard"          // 开局支援牌（场地/伙伴/道具/元素助佑）
@@ -56,13 +32,10 @@ export type EnemyModifierType =
 type ModifierWithoutValue = "immuneControl" | "innateTalent" | "fullEnergy";
 /** 数值参数的修饰器类型 */
 type ModifierWithNumber = "revive" | "damageReduction" | "damageBoost" | "supportCard" | "autoDish" | "innateArtifact";
-/** 字符串参数的修饰器类型 */
-type ModifierWithString = "elementalImmunity";
 
 export type EnemyModifier =
   | { type: ModifierWithoutValue }
-  | { type: ModifierWithNumber; value: number }
-  | { type: ModifierWithString; value: string };
+  | { type: ModifierWithNumber; value: number; value2?: number };
 
 export interface EnemyConfig {
   characterId: number;
@@ -96,13 +69,18 @@ export interface Reward {
 /** 事件触发条件（可扩展的判别联合类型） */
 export type EventConditionType =
   | { type: "hasCard"; cardId: number; minCount?: number }
+  | { type: "hasAnyCards"; cardIds: number[] }
   | { type: "hasCharacterTag"; tag: string; minCount?: number }
   | { type: "hasCharacter"; characterId: number }
+  | { type: "hasAllCharacters"; characterIds: number[] }
+  | { type: "noCharacter"; characterId: number }
   | { type: "defeatedEnemy"; enemyId: number }
   | { type: "floorAtLeast"; floor: number }
   | { type: "currencyAtLeast"; amount: number }
   | { type: "deckSizeAtLeast"; count: number }
   | { type: "teamSizeAtLeast"; count: number }
+  | { type: "teamSizeAtMost"; count: number }
+  | { type: "teamOnlyElements"; elements: string[] }
   | { type: "anyEventCompleted"; eventIds: number[] }
   | { type: "noEventCompleted"; eventIds: number[] };
 
@@ -118,23 +96,28 @@ export type EventEffectType =
   | { type: "removeCurrency"; amount: number }
   | { type: "addCard"; cardId: number; count?: number }
   | { type: "removeCard"; cardId: number; count?: number }
-  | { type: "addRandomCards"; count: number; tag?: string }
   | { type: "modifyCharacterMaxHp"; characterId?: number; amount: number }
-  | { type: "healCharacter"; characterId?: number; amount: number }
   | { type: "addCharacter"; characterId: number }
-  | { type: "modifyNextEnemyHp"; amount: number }
-  | { type: "skipNextNode" };
+  | { type: "modifyNextBattleAllyHp"; amount: number }
+  | { type: "modifyNextBattleEnemyHp"; amount: number }
+  | { type: "skipNextNormalBattle" }
+  | { type: "chooseAndRemoveCard" }
+  | { type: "randomCard"; tag: string; count?: number };
 
 export interface EventDefinition {
   id: number;
   name: string;
-  /** 事件分类：正面或负面 */
-  eventTag: "positive" | "negative";
   /** 横版剧情图 URL */
   imageUrl: string;
   /** 剧情文字模板（支持 {{variable}} 变量替换） */
   storyTemplate: string;
-  /** 触发条件列表（全部必须满足，权重用于多事件竞争选择） */
+  /**
+   * 条件匹配模式：
+   * - "or"（默认）：任一条件满足即为候选，满足的条件权重累加决定优先级
+   * - "and"：所有条件必须满足才为候选
+   */
+  conditionMode?: "and" | "or";
+  /** 触发条件列表（权重用于多事件竞争选择） */
   conditions: EventCondition[];
   /** 事件效果列表 */
   effects: EventEffectType[];
@@ -159,6 +142,8 @@ export interface PathNode {
   type: NodeType;
   encounters: Encounter[];
   completed: boolean;
+  /** 固定事件 ID（仅 event 节点，resolveEvent 优先使用） */
+  fixedEventId?: number;
 }
 
 export interface ShopItem {
@@ -195,12 +180,17 @@ export interface RoguelikeRun {
   completedEventIds: number[];
   /** 当前正在显示的事件 */
   currentEvent: EventDefinition | null;
-  /** 下一个敌人遭遇的 HP 修正（由事件效果 modifyNextEnemyHp 累加） */
-  nextEnemyHpModifier: number;
+  /** 下一场战斗我方全体 HP 修正 */
+  nextBattleAllyHpModifier: number;
+  /** 下一场战斗敌方全体 HP 修正 */
+  nextBattleEnemyHpModifier: number;
   /** 角色最大生命修正值（charId → 修正量） */
   characterHpModifiers: Record<number, number>;
-  /** 是否跳过下一个节点（由事件效果 skipNextNode 设置） */
-  skipNextNode: boolean;
+
+  /** 是否跳过下一个普通战斗节点（由事件效果 skipNextNormalBattle 设置） */
+  skipNextNormalBattle: boolean;
+  /** 是否需要选择删除卡牌（由事件效果 chooseAndRemoveCard 设置） */
+  pendingChooseAndRemoveCard: boolean;
 }
 
 export interface FloorConfig {
@@ -208,6 +198,8 @@ export interface FloorConfig {
   path: NodeType[];
   /** 每个路径节点的敌人配置（null 表示从默认池随机） */
   encounters?: (EnemyConfig[][] | null)[];
+  /** 事件节点的固定事件 ID 列表（与 path 中的 event 节点一一对应） */
+  fixedEventIds?: (number | null)[];
 }
 
 export interface RoguelikeConfig {

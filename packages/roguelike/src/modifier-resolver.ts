@@ -5,7 +5,7 @@
  */
 
 import { StateSymbol, type GameData, type EntityDefinition, type EntityState } from "@gi-tcg/core";
-import { KNOWN_STATUS_IDS } from "./enemy-modifiers";
+import { KNOWN_STATUS_IDS } from "./data";
 import type { EnemyModifier, EnemyModifierType } from "./types";
 
 // ============================================================
@@ -38,9 +38,10 @@ const getTalentCardId = (characterId: number): number =>
 /** 从 EntityDefinition 构建 EntityState */
 export function makeEntityState(id: number, def: EntityDefinition, variableOverrides?: Record<string, number>): EntityState {
   const varConfigs = def.varConfigs ?? {};
-  const variables = variableOverrides ?? Object.fromEntries(
+  const defaults = Object.fromEntries(
     Object.entries(varConfigs).map(([name, cfg]) => [name, cfg.initialValue]),
   );
+  const variables = variableOverrides ? { ...defaults, ...variableOverrides } : defaults;
   return { [StateSymbol]: "entity", id, definition: def, variables: variables as Record<string, number>, attachments: [] } as EntityState;
 }
 
@@ -62,8 +63,18 @@ const ENTITY_RESOLVERS: Partial<Record<EnemyModifierType, EntityResolver>> = {
     const def = lookup(KNOWN_STATUS_IDS.REVIVE);
     return def ? Array(modNum(mod, 1)).fill(def) : [];
   },
-  damageReduction: simpleResolver(KNOWN_STATUS_IDS.DAMAGE_REDUCTION),
-  damageBoost: simpleResolver(KNOWN_STATUS_IDS.DAMAGE_BOOST),
+  damageReduction: (mod, _charId, lookup) => {
+    const def = lookup(KNOWN_STATUS_IDS.DAMAGE_REDUCTION);
+    // value=每次减免量, value2=触发次数; value2 默认 1
+    const count = modNum(mod, 1) * (("value2" in mod && typeof mod.value2 === "number") ? mod.value2 : 1);
+    return def ? Array(count).fill(def) : [];
+  },
+  damageBoost: (mod, _charId, lookup) => {
+    const def = lookup(KNOWN_STATUS_IDS.DAMAGE_BOOST);
+    // value=每次增加量, value2=触发次数; value2 默认 1
+    const count = modNum(mod, 1) * (("value2" in mod && typeof mod.value2 === "number") ? mod.value2 : 1);
+    return def ? Array(count).fill(def) : [];
+  },
   innateTalent: (_mod, charId, lookup) => {
     const def = lookup(getTalentCardId(charId));
     return def && def.type === "equipment" ? [def] : [];
@@ -93,11 +104,9 @@ export function resolveModifier(
   // 1. 状态实体（通过解析器表）
   const resolver = ENTITY_RESOLVERS[mod.type];
   if (resolver) {
-    const needsUsageOverride = mod.type === "damageReduction" || mod.type === "damageBoost";
-    const overrides = needsUsageOverride ? { usage: modNum(mod, 1) } : undefined;
     const defs = resolver(mod, characterId, lookup);
     for (const def of defs) {
-      effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def, overrides) });
+      effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
     }
   }
 
@@ -109,10 +118,15 @@ export function resolveModifier(
     }
   }
 
-  // 3. 额外手牌
+  // 3. 料理效果（每回合随机加入食物卡到手牌，由 AI 使用）
   if (mod.type === "autoDish") {
-    const cardId = modNum(mod, 0);
-    if (cardId > 0) effects.push({ kind: "handCard", cardId });
+    const rounds = modNum(mod, 1);
+    const def = lookup(KNOWN_STATUS_IDS.AUTO_DISH_PER_ROUND);
+    if (def) {
+      for (let i = 0; i < rounds; i++) {
+        effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
+      }
+    }
   } else if (mod.type === "innateTalent") {
     const talentId = getTalentCardId(characterId);
     const def = lookup(talentId);
@@ -131,14 +145,17 @@ export function resolveModifier(
 
 /**
  * 批量解析 modifiers，返回分类后的结果。
+ * @param statusIdOffset / supportIdOffset — 多敌人场景下避免 ID 冲突的偏移量
  */
 export function resolveModifiers(
   modifiers: EnemyModifier[],
   characterId: number,
   data: GameData,
+  statusIdOffset = 0,
+  supportIdOffset = 0,
 ): { statusEntities: EntityState[]; supportEntities: EntityState[]; handCardIds: number[]; hasFullEnergy: boolean } {
-  let statusEntityCounter = SYNTHETIC_ENTITY_ID_MODIFIER;
-  let supportEntityCounter = SYNTHETIC_ENTITY_ID_SUPPORT;
+  let statusEntityCounter = SYNTHETIC_ENTITY_ID_MODIFIER + statusIdOffset;
+  let supportEntityCounter = SYNTHETIC_ENTITY_ID_SUPPORT + supportIdOffset;
   const statusEntities: EntityState[] = [];
   const supportEntities: EntityState[] = [];
   const handCardIds: number[] = [];

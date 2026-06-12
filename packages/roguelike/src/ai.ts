@@ -1,20 +1,17 @@
-// Copyright (C) 2024-2025 Guyutongxue
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as
-// published by the Free Software Foundation, either version 3 of the
-// License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/**
+ * 敌人 AI
+ *
+ * 优先级：
+ *   1. 被控制 → 切人
+ *   2. switchAfterSkill → 切人（放完技能后的强制切人）
+ *   3. 有可打的牌 → 打牌
+ *   4. 有可用技能 → 用最佳技能（爆发 > 元素战技 > 普攻）
+ *   5. 骰子不够且没切过 → 切人
+ *   6. 结束回合
+ */
 
 import type { PlayerIO, GameData } from "@gi-tcg/core";
-import { dispatchRpc, ActionValidity, type Action } from "@gi-tcg/typings";
+import { dispatchRpc, ActionValidity, type Action, type Notification } from "@gi-tcg/typings";
 
 type SkillType = "normal" | "elemental" | "burst";
 
@@ -38,19 +35,20 @@ function buildSkillTypeMap(data: GameData): Map<number, SkillType> {
   return map;
 }
 
-/**
- * 创建简化 AI PlayerIO。
- *
- * 优先级：元素爆发 > 元素战技（轮流使用） > 普通攻击 > 出牌 > 结束回合
- * 技能类型通过 GameData 的 skillDefinition 确定，而非 ID 尾数。
- * AI 使用 alwaysOmni 配置，骰子由引擎自动选择。
- */
 export function createSimpleAI(data: GameData): PlayerIO {
   const skillTypeMap = buildSkillTypeMap(data);
-  let lastElementalSkillId: number | null = null;
+
+  let switchAfterSkill = false;
+  let justSwitched = false;
+  let activeCharacterId = -1;
 
   return {
-    notify: () => {},
+    notify: (notification: Notification) => {
+      const chId = notification.state?.player?.[1]?.activeCharacterId;
+      if (typeof chId === "number") {
+        activeCharacterId = chId;
+      }
+    },
     rpc: dispatchRpc({
       chooseActive: async (req) => ({
         activeCharacterId: req.candidateIds[0],
@@ -65,58 +63,101 @@ export function createSimpleAI(data: GameData): PlayerIO {
           return { chosenActionIndex: 0, usedDice: [] };
         }
 
-        // 单次遍历分类所有有效行动
-        const burstIndices: number[] = [];
-        const elementalIndices: number[] = [];
-        const normalIndices: number[] = [];
-        let cardIdx = -1;
-        let endIdx = -1;
+        const actions = req.action;
+        const playCards: number[] = [];
+        const burstSkills: number[] = [];
+        const elementalSkills: number[] = [];
+        const normalSkills: number[] = [];
+        const switchTargets: number[] = [];
+        let declareEndIdx = -1;
+        let hasAnySkill = false;
+        let hasValidSkill = false;
 
-        for (let i = 0; i < req.action.length; i++) {
-          const a = req.action[i];
-          if (a.action?.$case === "declareEnd") { endIdx = i; continue; }
-          if (a.validity !== ActionValidity.VALID) continue;
-          if (a.action?.$case === "playCard") { if (cardIdx < 0) cardIdx = i; continue; }
-          const sid = getSkillId(a);
-          const st = sid != null ? skillTypeMap.get(sid) : undefined;
-          if (st === "burst") burstIndices.push(i);
-          else if (st === "elemental") elementalIndices.push(i);
-          else if (st === "normal") normalIndices.push(i);
+        for (let i = 0; i < actions.length; i++) {
+          const a = actions[i];
+          if (a.action?.$case === "declareEnd") {
+            declareEndIdx = i;
+            continue;
+          }
+          if (a.action?.$case === "switchActive") {
+            if (a.validity === ActionValidity.VALID) {
+              switchTargets.push(i);
+            }
+            continue;
+          }
+          if (a.action?.$case === "useSkill") {
+            hasAnySkill = true;
+            if (a.validity === ActionValidity.VALID) {
+              hasValidSkill = true;
+              const sid = getSkillId(a);
+              const st = sid != null ? skillTypeMap.get(sid) : undefined;
+              if (st === "burst") burstSkills.push(i);
+              else if (st === "elemental") elementalSkills.push(i);
+              else normalSkills.push(i);
+            }
+            continue;
+          }
+          if (a.action?.$case === "playCard") {
+            if (a.validity === ActionValidity.VALID) playCards.push(i);
+            continue;
+          }
         }
 
-        // 1. 元素爆发（最高优先级）
-        if (burstIndices.length > 0) {
-          const idx = burstIndices[0];
-          return { chosenActionIndex: idx, usedDice: req.action[idx].autoSelectedDice };
-        }
+        const isControlled = hasAnySkill && !hasValidSkill;
 
-        // 2. 元素战技（多个战技时轮流使用）
-        if (elementalIndices.length > 0) {
-          for (const idx of elementalIndices) {
-            const sid = getSkillId(req.action[idx]);
-            if (sid !== lastElementalSkillId) {
-              lastElementalSkillId = sid ?? null;
-              return { chosenActionIndex: idx, usedDice: req.action[idx].autoSelectedDice };
+        const doSwitch = () => {
+          if (switchTargets.length === 0) return null;
+          const sorted = switchTargets
+            .map(i => ({
+              idx: i,
+              charId: (actions[i].action as { $case: "switchActive"; value: { characterId: number } }).value.characterId,
+            }))
+            .sort((a, b) => a.charId - b.charId); // 升序：小的在前
+          // activeCharacterId 是当前活跃角色（不在 targets 中）
+          // 它在排序列表中的下一个就是轮转目标
+          // 用插入点：找最后一个 < activeCharacterId 的位置，下一个就是目标
+          let curIdx = -1;
+          for (let j = 0; j < sorted.length; j++) {
+            if (sorted[j].charId < activeCharacterId) {
+              curIdx = j;
             }
           }
-          const idx = elementalIndices[0];
-          lastElementalSkillId = getSkillId(req.action[idx]) ?? null;
-          return { chosenActionIndex: idx, usedDice: req.action[idx].autoSelectedDice };
-        }
+          const picked = sorted[(curIdx + 1) % sorted.length];
+          switchAfterSkill = false;
+          justSwitched = true;
+          return { chosenActionIndex: picked.idx, usedDice: actions[picked.idx].autoSelectedDice };
+        };
 
-        // 3. 普通攻击
-        if (normalIndices.length > 0) {
-          const idx = normalIndices[0];
-          return { chosenActionIndex: idx, usedDice: req.action[idx].autoSelectedDice };
+        if (isControlled) {
+          const result = doSwitch();
+          if (result) return result;
+          if (declareEndIdx >= 0) return { chosenActionIndex: declareEndIdx, usedDice: [] };
+          return { chosenActionIndex: 0, usedDice: [] };
         }
-
-        // 4. 出牌
-        if (cardIdx >= 0) {
-          return { chosenActionIndex: cardIdx, usedDice: req.action[cardIdx].autoSelectedDice };
+        if (switchAfterSkill) {
+          const result = doSwitch();
+          if (result) return result;
+          switchAfterSkill = false;
         }
-
-        // 5. 结束回合
-        return { chosenActionIndex: endIdx >= 0 ? endIdx : 0, usedDice: [] };
+        if (playCards.length > 0) {
+          const idx = playCards[0];
+          return { chosenActionIndex: idx, usedDice: actions[idx].autoSelectedDice };
+        }
+        const chosenSkills = [burstSkills, elementalSkills, normalSkills].find(a => a.length > 0);
+        if (chosenSkills) {
+          justSwitched = false;
+          switchAfterSkill = true;
+          const idx = chosenSkills[0];
+          return { chosenActionIndex: idx, usedDice: actions[idx].autoSelectedDice };
+        }
+        if (!justSwitched) {
+          const result = doSwitch();
+          if (result) return result;
+        }
+        if (declareEndIdx >= 0) {
+          return { chosenActionIndex: declareEndIdx, usedDice: [] };
+        }
+        return { chosenActionIndex: 0, usedDice: [] };
       },
     }),
   };

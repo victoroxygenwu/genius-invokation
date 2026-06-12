@@ -18,9 +18,7 @@ import { computeCardWeights } from "./card-weights";
 import { getCardName, sample, weightedSample, validateIds } from "./utils";
 import {
   WEAPON_CARD_MAP,
-  DEFAULT_WEAPON_CARD,
   ARTIFACT_CARD_MAP,
-  BEST_PARTNER,
   MONDSTADT_HASH_BROWN,
   ELEMENTAL_RESONANCE_CARDS,
   ELEMENTAL_TRANSMUTATION_CARDS,
@@ -39,9 +37,7 @@ import {
 
 export const INITIAL_CARD_IDS = new Set([
   ...Object.values(WEAPON_CARD_MAP),
-  DEFAULT_WEAPON_CARD,
   ...Object.values(ARTIFACT_CARD_MAP),
-  BEST_PARTNER,
   MONDSTADT_HASH_BROWN,
 ]);
 
