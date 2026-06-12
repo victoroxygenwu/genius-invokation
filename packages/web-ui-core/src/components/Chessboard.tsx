@@ -353,12 +353,15 @@ function calcCardsInfo(
   for (const who2 of [0, 1] as const) {
     const opp = who2 !== who;
     const player = state.player[who2];
+    if (!player) continue;
 
     // Pile
-    const pileSize = player.pileCard.length;
+    const pileCard = player.pileCard ?? [];
+    const pileSize = pileCard.length;
     for (let i = 0; i < pileSize; i++) {
       const [x, y] = getPilePos(size, opp);
-      const card = player.pileCard[i];
+      const card = pileCard[i];
+      if (!card) continue;
       cards.push({
         id: card.id,
         data: card,
@@ -384,7 +387,7 @@ function calcCardsInfo(
     }
 
     // Hand
-    const handCard = player.handCard.toSorted(
+    const handCard = (player.handCard ?? []).toSorted(
       (a, b) => a.definitionId - b.definitionId,
     );
     const totalHandCardCount = handCard.length;
@@ -406,6 +409,7 @@ function calcCardsInfo(
 
     for (let i = 0; i < totalHandCardCount; i++) {
       const card = handCard[i];
+      if (!card) continue;
       const playStep =
         availableSteps.find(
           (step): step is PlayCardActionStep =>
@@ -582,22 +586,26 @@ function calcEntitiesInfo(
   for (const who2 of [0, 1] as const) {
     const opp = who2 !== who;
     const player = state.player[who2];
-    const supports = player.support.map(calcEntityInfo(opp, "support", false));
+    if (!player) {
+      result.push({ supports: [], summons: [], combatStatuses: [], characterAreaEntities: new Map() });
+      continue;
+    }
+    const supports = (player.support ?? []).map(calcEntityInfo(opp, "support", false));
     supports.push(
       ...(previewData.newEntities.get(`support${who2}`) ?? []).map(
         calcEntityInfo(opp, "support", true, supports.length),
       ),
     );
-    const summons = player.summon.map(calcEntityInfo(opp, "summon", false));
+    const summons = (player.summon ?? []).map(calcEntityInfo(opp, "summon", false));
     summons.push(
       ...(previewData.newEntities.get(`summon${who2}`) ?? []).map(
         calcEntityInfo(opp, "summon", true, summons.length),
       ),
     );
-    const combatStatuses = player.combatStatus.map(calcStatusInfo);
+    const combatStatuses = (player.combatStatus ?? []).map(calcStatusInfo);
     const statuses = new Map<number, StatusInfo[]>();
-    for (const ch of player.character) {
-      statuses.set(ch.id, ch.entity.map(calcStatusInfo));
+    for (const ch of player.character ?? []) {
+      statuses.set(ch.id, (ch.entity ?? []).map(calcStatusInfo));
     }
     result.push({
       supports,
@@ -665,22 +673,25 @@ function rerenderChildren(opt: {
   for (const who of [0, 1] as const) {
     const opp = who !== opt.who;
     const player = state.player[who];
+    if (!player) continue;
     const oppFocused =
       opp && opt.hasOppChessboard && opt.oppHandState === "focusing";
+    const pc = player.pileCard ?? [];
+    const hc = player.handCard ?? [];
     cardCountHints.push({
       area: opp ? "oppPile" : "myPile",
-      value: player.pileCard.length,
+      value: pc.length,
       transform: {
         ...getPileHintPos(size, opp),
-        z: player.pileCard.length * 0.1,
+        z: pc.length * 0.1,
         ...COUNT_HINT_TRANSFORM_BASE,
       },
     });
     cardCountHints.push({
       area: opp ? "oppHand" : "myHand",
-      value: player.handCard.length,
+      value: hc.length,
       transform: {
-        ...getHandHintPos(size, opp, player.handCard.length, oppFocused),
+        ...getHandHintPos(size, opp, hc.length, oppFocused),
         ...COUNT_HINT_TRANSFORM_BASE,
         z: opp && !oppFocused ? 8 : FOCUSING_HANDS_Z,
       },

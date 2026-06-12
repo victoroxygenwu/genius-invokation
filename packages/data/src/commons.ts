@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { status, combatStatus, summon, DamageType, attachment, DiceType } from "@gi-tcg/core/builder";
+import { status, combatStatus, summon, DamageType, attachment, DiceType, type StatusHandle, type CardHandle } from "@gi-tcg/core/builder";
 
 /**
  * @id 100
@@ -194,6 +194,27 @@ export const GenericDamageReduction = status(211)
   .on("decreaseDamaged")
   .usageCanAppend(1, Infinity)
   .decreaseDamage(1)
+  .done();
+
+/**
+ * @id 212
+ * @name 自动料理
+ * @description
+ * 每回合开始时，随机将一张食物卡加入手牌。
+ */
+export const AutoDishPerRound = status(212)
+  .on("roundBegin")
+  .usage(1)
+  .do((c) => {
+    const foodCardIds: CardHandle[] = [
+      333001, 333002, 333003, 333004, 333005, 333006, 333007, 333008,
+      333010, 333011, 333012, 333013, 333014, 333015, 333016, 333017,
+      333018, 333019, 333020, 333022, 333023, 333024, 333025, 333027,
+      333028, 333029, 333030,
+    ] as CardHandle[];
+    const picked = c.random(foodCardIds);
+    c.createHandCard(picked);
+  })
   .done();
 
 /**

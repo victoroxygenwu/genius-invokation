@@ -45,7 +45,6 @@ import {
 } from "@gi-tcg/typings";
 import type {
   AbsorbDiceHistoryChild,
-  ActionHistoryBlock,
   ConvertDiceHistoryChild,
   EnergyHistoryChild,
   GenerateDiceHistoryChild,

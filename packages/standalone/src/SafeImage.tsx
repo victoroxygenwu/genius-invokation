@@ -18,6 +18,7 @@ export function SafeImage(props: SafeImageProps) {
       class={props.class}
       loading={props.loading}
       style={props.style}
+      onDragStart={(e) => e.preventDefault()}
       onError={(e) => (e.currentTarget.src = FALLBACK_IMAGE)}
     />
   );

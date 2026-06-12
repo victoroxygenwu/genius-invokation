@@ -532,7 +532,7 @@ export class Game {
         type: "changePhase",
         newPhase: "gameEnd",
       });
-      if (winner && winner !== this.state.winner) {
+      if (winner !== null && winner !== this.state.winner) {
         this.mutate({
           type: "setWinner",
           winner,
