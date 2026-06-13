@@ -16,5 +16,7 @@
 import "./version-meta";
 import { registry as baseRegistry } from "@gi-tcg/data";
 
+/** 从官方数据 registry 克隆的 roguelike 专用 registry（可追加定义） */
 export const registry = baseRegistry.clone();
+/** 当前注册作用域（用于 .setVersionInfo("roguelike", {}) 标记 roguelike 专属定义） */
 export const scope = registry.begin();

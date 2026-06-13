@@ -19,3 +19,11 @@ skills-lock.json
 
 # Dev notes
 事件卡牌整理.md
+
+# Build artifacts
+gi-tcg-roguelike/
+packages/standalone/dist-roguelike/
+packages/standalone/src-tauri/
+
+# Prototype files
+packages/roguelike/src/__prototype__/

@@ -92,21 +92,34 @@ export const WEAPON_TAGS = new Set(["sword", "bow", "catalyst", "claymore", "pol
 // 敌人血量
 // ============================================================
 
+/**
+ * 楼层 HP 倍率（索引 = floor - 1）
+ * 公式：HP = BASE_HP[type] * FLOOR_HP_MULTIPLIER[floor - 1]
+ */
 export const FLOOR_HP_MULTIPLIER = [1.0, 1.5, 2.0, 2.5];
+
+/** 基础 HP（按遭遇类型） */
 export const BASE_HP = { normal: 10, elite: 20, boss: 30 };
 
 // ============================================================
 // 经济系统常量
 // ============================================================
 
+/** 遭遇类型对应的默认货币奖励 */
 export const ENCOUNTER_CURRENCY: Record<EncounterType, number> = {
   normal: 5, elite: 10, boss: 30,
 };
 
+/** 商店卡牌价格范围 */
 export const SHOP_CARD_PRICE_MIN = 1;
 export const SHOP_CARD_PRICE_MAX = 5;
 
-// 刷新/删牌费用公式
+/**
+ * 刷新/删牌费用增长系数
+ * 公式：cost = base * SHOP_COST_GROWTH_RATE ^ count
+ * - 刷新基础费用 = 2
+ * - 删牌基础费用 = 10
+ */
 export const SHOP_COST_GROWTH_RATE = 1.5;
 
 // ============================================================
@@ -206,6 +219,9 @@ export const ALL_NORMAL_ENEMIES = byTier("normal");
 export const ALL_ELITE_ENEMIES = byTier("elite");
 export const ALL_BOSS_ENEMIES = byTier("boss");
 
+/** 所有怪物角色 ID 集合（用于排除怪物天赋牌） */
+export const ENEMY_CHARACTER_IDS = new Set(ENEMY_DEFS.map(([id]) => id));
+
 export const DEFAULT_ENEMY_POOL = {
   normal: ALL_NORMAL_ENEMIES,
   elite: ALL_ELITE_ENEMIES,
@@ -224,6 +240,12 @@ export function validateEnemyIds(characters: ReadonlyMap<number, unknown>): stri
 // 经济系统函数
 // ============================================================
 
+/**
+ * 计算敌人 HP
+ * @param floor - 当前楼层（1-based）
+ * @param type - 遭遇类型
+ * @returns HP = BASE_HP[type] * FLOOR_HP_MULTIPLIER[floor - 1]，最低 1
+ */
 export function getEnemyHp(floor: number, type: "normal" | "elite" | "boss"): number {
   const base = BASE_HP[type];
   const multiplier = FLOOR_HP_MULTIPLIER[floor - 1] ?? 1.0;
@@ -236,14 +258,23 @@ export function getEncounterCurrency(encounter: { configs: { currencyReward: num
   return firstValidConfig?.currencyReward ?? ENCOUNTER_CURRENCY[encounter.type] ?? 0;
 }
 
+/** 计算商店刷新费用：2 * 1.5^refreshCount（向上取整） */
 export function getRefreshCost(refreshCount: number): number {
   return Math.round(2 * Math.pow(SHOP_COST_GROWTH_RATE, refreshCount));
 }
 
+/** 计算删牌费用：10 * 1.5^deleteCount（向上取整） */
 export function getDeleteCost(deleteCount: number): number {
   return Math.round(10 * Math.pow(SHOP_COST_GROWTH_RATE, deleteCount));
 }
 
+/**
+ * 计算利息收入
+ * @param currency - 当前货币
+ * @param threshold - 利息上限
+ * @param rate - 每 N 货币获得 1 利息
+ * @returns 利息 = floor(min(currency, threshold) / rate)
+ */
 export function getInterest(currency: number, threshold: number, rate: number): number {
   return Math.floor(Math.min(currency, threshold) / rate);
 }
@@ -256,7 +287,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2001,
     name: "初遇派蒙",
-    imageUrl: "/events/2001_first_meeting_paimon.jpg",
+    imageUrl: "/events/2001_first_meeting_paimon.webp",
     storyTemplate: "{{playerNames}} 在旅途的起点遇到了一个奇妙的飞行生物——派蒙。她自告奋勇成为了你们的向导，并带来了两张「最好的伙伴」。",
     conditions: [],
     effects: [
@@ -266,7 +297,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2002,
     name: "寰宇之旅",
-    imageUrl: "/events/2002_journey_across_worlds.jpg",
+    imageUrl: "/events/2002_journey_across_worlds.webp",
     storyTemplate: "{{playerNames}} 在旅途中发现了一道神秘的传送门。门后似乎通往另一个世界，充满了未知的可能性。虽然旅途充满风险，但收获也颇为丰厚。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1116 }, weight: 3 },
@@ -280,7 +311,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2003,
     name: "在阳光更好的日子再会",
-    imageUrl: "/events/2003_reunion_on_sunnier_day.jpg",
+    imageUrl: "/events/2003_reunion_on_sunnier_day.webp",
     storyTemplate: "{{playerNames}} 在须弥的旅途中遇到了一位故人。他带来了来自沙漠的消息，以及一些珍贵的物资。",
     conditions: [
       { condition: { type: "hasCharacterTag", tag: "sumeru", minCount: 2 }, weight: 2 },
@@ -298,7 +329,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2004,
     name: "要做优秀的巡林员",
-    imageUrl: "/events/2004_excellent_forest_ranger.jpg",
+    imageUrl: "/events/2004_excellent_forest_ranger.webp",
     storyTemplate: "{{playerNames}} 在化城郭遇到了正在写日记的柯莱。她分享了巡林的经验，并为你们准备了一些物资。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1701 }, weight: 2 },
@@ -316,7 +347,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2005,
     name: "叮呤哐啷蛋卷工坊",
-    imageUrl: "/events/2005_clanging_egg_roll_workshop.jpg",
+    imageUrl: "/events/2005_clanging_egg_roll_workshop.webp",
     storyTemplate: "{{playerNames}} 来到了爱诺和伊涅芙的工坊。这里充满了各种奇妙的发明和改造方案。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1216 }, weight: 2 },
@@ -336,7 +367,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2006,
     name: "霜月之坊",
-    imageUrl: "/events/2006_frost_moon_shrine.jpg",
+    imageUrl: "/events/2006_frost_moon_shrine.webp",
     storyTemplate: "{{playerNames}} 来到了霜月之坊。菈乌玛正在这里制作新的作品，她热情地邀请你们参与。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1711 }, weight: 3 },
@@ -352,7 +383,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2007,
     name: "新月之拥",
-    imageUrl: "/events/2007_embrace_of_new_moon.jpg",
+    imageUrl: "/events/2007_embrace_of_new_moon.webp",
     storyTemplate: "{{playerNames}} 在月光下感受到了一股神秘的力量。新月的光辉笼罩着你们，带来了祝福与力量。",
     conditions: [
       { condition: { type: "hasCharacterTag", tag: "nodkrai", minCount: 2 }, weight: 3 },
@@ -368,7 +399,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2008,
     name: "夜客致访",
-    imageUrl: "/events/2008_night_visitor_arrives.jpg",
+    imageUrl: "/events/2008_night_visitor_arrives.webp",
     storyTemplate: "{{playerNames}} 在夜色中遇到了一位神秘的来客。他带来了来自远方的消息和一些珍贵的物品。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1418 }, weight: 3 },
@@ -384,7 +415,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2009,
     name: "故事的种子",
-    imageUrl: "/events/2009_seed_of_story.jpg",
+    imageUrl: "/events/2009_seed_of_story.webp",
     storyTemplate: "{{playerNames}} 在蒙德的酒馆里听到了一个古老的故事。故事中蕴含着强大的力量，为你们带来了新的可能。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1503 }, weight: 3 },
@@ -402,7 +433,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2010,
     name: "呀！呀！",
-    imageUrl: "/events/2010_ya_ya.jpg",
+    imageUrl: "/events/2010_ya_ya.webp",
     storyTemplate: "{{playerNames}} 在旅途中遇到了一群吵闹的小生物。它们的叫声让人心烦意乱，但也带来了一些意外的收获。",
     conditions: [
       { condition: { type: "hasCard", cardId: 313009, minCount: 2 }, weight: 3 },
@@ -416,7 +447,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2011,
     name: "闭嘴，哥们",
-    imageUrl: "/events/2011_shut_up_buddy.jpg",
+    imageUrl: "/events/2011_shut_up_buddy.webp",
     storyTemplate: "{{playerNames}} 在旅途中遇到了一群不友好的生物。战斗一触即发，虽然你们最终获胜，但也付出了代价。",
     conditions: [
       { condition: { type: "hasAllCharacters", characterIds: [1517, 1709] }, weight: 3 },
@@ -431,7 +462,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2012,
     name: "不会吧，哥们",
-    imageUrl: "/events/2012_no_way_buddy.jpg",
+    imageUrl: "/events/2012_no_way_buddy.webp",
     storyTemplate: "{{playerNames}} 在旅途中发现了一条捷径。虽然需要放弃一些东西，但可以节省不少时间。",
     conditionMode: "and",
     conditions: [
@@ -446,7 +477,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2013,
     name: "束手就擒！",
-    imageUrl: "/events/2013_surrender_now.jpg",
+    imageUrl: "/events/2013_surrender_now.webp",
     storyTemplate: "{{playerNames}} 在旅途中遇到了夏沃蕾。她正在追捕一群罪犯，并邀请你们加入。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1313 }, weight: 5 },
@@ -462,7 +493,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2016,
     name: "束手就擒！（招募）",
-    imageUrl: "/events/2013_surrender_now.jpg",
+    imageUrl: "/events/2013_surrender_now.webp",
     storyTemplate: "{{playerNames}} 在旅途中遇到了正在追捕罪犯的夏沃蕾。她邀请你们协助，作为回报，她愿意加入你们的队伍。",
     conditions: [
       { condition: { type: "noCharacter", characterId: 1313 }, weight: 0 },
@@ -477,7 +508,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2014,
     name: "伟大圣龙库胡勒阿乔",
-    imageUrl: "/events/2014_great_dragon_kuhuleahjo.jpg",
+    imageUrl: "/events/2014_great_dragon_kuhuleahjo.webp",
     storyTemplate: "{{playerNames}} 遭遇了传说中的伟大圣龙库胡勒阿乔。虽然你们成功击退了它，但也消耗了不少资源。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1709 }, weight: 3 },
@@ -494,7 +525,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2015,
     name: "以极限之名",
-    imageUrl: "/events/2015_in_name_of_limit.jpg",
+    imageUrl: "/events/2015_in_name_of_limit.webp",
     storyTemplate: "{{playerNames}} 决定挑战自己的极限。虽然获得了强大的力量，但也付出了代价。",
     conditions: [
       { condition: { type: "hasCharacter", characterId: 1709 }, weight: 2 },
@@ -513,7 +544,7 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   {
     id: 2999,
     name: "旅途小憩",
-    imageUrl: "/events/2999_rest_during_journey.jpg",
+    imageUrl: "/events/2999_rest_during_journey.webp",
     storyTemplate: "{{playerNames}} 找到了一处安静的地方稍作休息，恢复了一些精力，为接下来的旅途做好了准备。",
     conditions: [],
     effects: [
@@ -523,13 +554,19 @@ export const DEFAULT_EVENTS: EventDefinition[] = [
   },
 ];
 
-/** 回退事件 — 仅由 resolveEvent 在无条件事件可触发时使用 */
-export const FALLBACK_EVENT_ID = 2999;
+/** 回退事件 ID 集合 — 无其他事件可触发时随机选取一个 */
+export const FALLBACK_EVENT_IDS = new Set([2999]);
 
 // ============================================================
 // 默认配置
 // ============================================================
 
+/**
+ * 默认 roguelike 配置
+ * - 3 层，每层 5-6 个节点
+ * - 初始货币 0，商店 10 张卡，奖励 5 张卡
+ * - 利息上限 50，每 10 货币 1 利息
+ */
 export const ROGUELIKE_CONFIG: RoguelikeConfig = {
   floors: [
     { floor: 1, path: ["event", "normal", "event", "elite", "shop", "boss"], fixedEventIds: [2001] },

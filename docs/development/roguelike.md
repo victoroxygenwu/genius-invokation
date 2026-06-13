@@ -160,15 +160,17 @@ characterSelect → addCharacter → encounterSelect → battle → reward → s
 ```typescript
 type EnemyModifier =
   | { type: "immuneControl" }                    // 无参数，免疫石化/冻结/眩晕
-  | { type: "revive"; value?: number }           // value = 复活次数（默认 1）
-  | { type: "damageReduction"; value?: number; value2?: number }  // value = 减伤量, value2 = 层数
-  | { type: "damageBoost"; value?: number; value2?: number }      // value = 增伤量, value2 = 层数
   | { type: "innateTalent" }                     // 自动推断天赋牌
   | { type: "fullEnergy" }                       // 开局满能量
+  | { type: "revive"; value: number }            // value = 复活次数
+  | { type: "damageReduction"; value: number; value2?: number }  // value = 减伤量, value2 = 层数
+  | { type: "damageBoost"; value: number; value2?: number }      // value = 增伤量, value2 = 层数
   | { type: "supportCard"; value: number }       // value = 支援牌实体 ID
-  | { type: "autoDish"; value?: number }         // value = 食物卡 ID（0 = 随机状态）
+  | { type: "autoDish"; value: number }          // value = 食物卡 ID（0 = 随机状态）
   | { type: "innateArtifact"; value: number };   // value = 圣遗物卡 ID
 ```
+
+> **注意：** 无参数类型（`ModifierWithoutValue`）和带数值类型（`ModifierWithNumber`）在代码中通过判别联合区分，`value` 对于带数值类型是必填字段。解析时 `modNum()` 函数提供回退默认值（revive=1, damageReduction/damageBoost 的 value2 默认取 value）。`value2` 仅对 damageReduction/damageBoost 有效，表示可用次数层数。
 
 **EventConditionType（15 种条件）：**
 - 卡牌相关：`hasCard`, `hasAnyCards`
@@ -221,35 +223,36 @@ interface RoguelikeRun {
 [开始]
   │
   ▼
-characterSelect ──(选 2 角色)──→ processCurrentNode
-  │                                     │
-  │                    ┌────────────────┼────────────────┐
-  │                    ▼                ▼                ▼
-  │               encounterSelect    shop             event
-  │                    │                │                │
-  │                    ▼                ▼                │
-  │                 battle         finishShop()          │
-  │                    │                │                │
-  │                    ▼                └────────────────┘
-  │               reward                                  │
-  │                    │                    confirmEvent() │
-  │                    └──────────→ processCurrentNode ←──┘
-  │                                     │
-  │                          ┌──────────┴──────────┐
-  │                          ▼                     ▼
-  │                    addCharacter            (下一节点)
-  │                          │                     │
-  │                          ▼                     ▼
-  │                    processCurrentNode      (楼层完成)
-  │                                               │
-  │                                    ┌──────────┴──────────┐
-  │                                    ▼                     ▼
-  │                               (更多楼层)            (最终层)
-  │                                    │                     │
-  │                              generatePath            victory
+characterSelect ──(选 2 角色)──→ processCurrentNode ←──────────────────┐
+  │                                     │                              │
+  │                    ┌────────────────┼────────────────┐             │
+  │                    ▼                ▼                ▼             │
+  │               encounterSelect    shop             event            │
+  │                    │                │                │             │
+  │                    ▼                ▼                │             │
+  │                 battle         finishShop()          │             │
+  │                    │                │                │             │
+  │                    ▼                └────────────────┘             │
+  │               reward                                  │            │
+  │                    │                    confirmEvent() │            │
+  │                    └──────────→ processCurrentNode ←──┘            │
+  │                                     │                              │
+  │                          ┌──────────┴──────────┐                   │
+  │                          ▼                     ▼                   │
+  │                    addCharacter            (下一节点)               │
+  │                          │                     │                   │
+  │                          ▼                     ▼                   │
+  │                    processCurrentNode      (楼层完成)              │
+  │                                               │                   │
+  │                                    ┌──────────┴──────────┐        │
+  │                                    ▼                     ▼        │
+  │                               (更多楼层)            (最终层)       │
+  │                                    │                     │        │
+  │                              generatePath            victory      │
+  │                                    │                               │
+  │                                    └──(满4人时递归跳过选角)────────┘
   │
   ├──(战斗失败)──→ gameOver
-  └──(到达 maxFloors)──→ victory
 ```
 
 **注意：** `confirmEvent()` 和 `finishShop()` 是 `RoguelikeRunManager` 的方法调用，不是 `RunState`。它们将状态推进到下一个节点对应的状态。
@@ -263,8 +266,9 @@ private processCurrentNode(): void {
     // 当前层所有节点完成
     if (this.run.floor < this.run.maxFloors) {
       this.run.floor++;
-      if (this.run.characters.length >= MAX_TEAM_SIZE) {
-        this.run.floorSkipCharSelection = true;
+      // 满 4 人后自动跳过角色选择
+      this.run.floorSkipCharSelection = this.run.characters.length >= MAX_TEAM_SIZE;
+      if (this.run.floorSkipCharSelection) {
         this.run.path = this.generatePath(this.run.floor - 1);
         this.run.currentNodeIndex = 0;
         this.processCurrentNode(); // 递归处理新层的第一个节点
@@ -274,6 +278,8 @@ private processCurrentNode(): void {
       this.setState("addCharacter");
     } else {
       this.setState("victory");
+      this.autoSaveEnabled = false;
+      this.clearSave();
     }
     return;
   }
@@ -401,7 +407,7 @@ function generateInitialDeck(characterTagsList: string[][]): number[] {
 | 类别 | 条件 | 示例 |
 |------|------|------|
 | 普通行动牌 | 3xxxxx 范围，排除初始/条件/不可获取 | 立本、最好的伙伴 |
-| 天赋牌 | 2xxxxx 范围，仅限队伍角色 | 魔偶剑鬼天赋 |
+| 天赋牌 | 2xxxxx 范围，仅限队伍角色，**排除怪物角色的天赋牌**（通过 `ENEMY_CHARACTER_IDS` 过滤） | 魔偶剑鬼天赋 |
 | 元素共鸣 | 2+ 同元素角色 | 火元素共鸣·热诚之火 |
 | 元素转化 | >= 4 角色且恰好 2 种元素 | 超导祝佑（cryo+electro）等 |
 | 地区共鸣 | 2+ 同地区角色 | 蒙德共鸣·迅捷之风 |
@@ -417,7 +423,7 @@ function generateInitialDeck(characterTagsList: string[][]): number[] {
 2. 沿邻接表向外扩散，每跳衰减 alpha=0.5
 3. 多源传播到同一节点时**加法累加**（`signal += contribution`）
 4. 最大 4 轮扩散，单次传播贡献（contribution = nodeSignal × edgeWeight × roundWeight）< 0.01 时跳过该条路径
-5. 最终权重 = 1 + signal，范围 [1.0, +∞)
+5. 最终权重 = 1 + signal，理论范围 [1.0, +∞)，实际通常在 [1.0, 3.0] 之间（因 `processed` 集合限制，节点仅在首次被发现的轮次接收累积信号）
 
 **效果示例：**
 - 卡组中有「魔偶剑鬼」→「魔偶剑鬼天赋」权重很高（直接关联）
@@ -489,7 +495,7 @@ evaluateEventWeight(event, run, data):
 |----|------|------|------|
 | 2001 | 初遇派蒙 | 无条件 | addCard(最好的伙伴×2) |
 | 2002 | 寰宇之旅 | hasCharacter(1116) OR defeatedEnemy(2204) | addCurrency(10), chooseAndRemoveCard |
-| 2003 | 在阳光更好的日子再会 | hasCharacterTag(sumeru,2) OR hasCard(多项) | addCard×3 |
+| 2003 | 在阳光更好的日子再会 | hasCharacterTag(sumeru,2) OR hasCard(多项) | addCard(332026×2, 322022×2, 332040×2) |
 | 2004 | 要做优秀的巡林员 | hasCharacter(1701/1702) OR hasCard(多项) | addCard(321014×2), modifyNextBattleEnemyHp(-10) |
 | 2005 | 叮呤哐啷蛋卷工坊 | hasCharacter(1216/1417) OR hasCard(多项) | addCard×3 |
 | 2006 | 霜月之坊 | hasCharacter(1711) OR hasCard(321037/217111) | addCard×2, addCurrency(5) |
@@ -505,6 +511,8 @@ evaluateEventWeight(event, run, data):
 | 2016 | 束手就擒！（招募） | AND: noCharacter(1313) + teamOnlyElements(pyro,electro) | addCharacter(1313), addCard(213131×2) |
 | 2999 | 旅途小憩（兜底） | 无条件 | addCurrency(5), modifyNextBattleAllyHp(2) |
 
+> **回退事件机制：** `FALLBACK_EVENT_IDS` 是一个 ID 集合（当前包含 2999），当无其他事件满足条件时从中随机选取。回退事件**可重复触发**，不会被记录到 `completedEventIds`。
+
 ---
 
 ## 9. 经济系统
@@ -512,7 +520,7 @@ evaluateEventWeight(event, run, data):
 ### 9.1 货币来源
 
 - **击败敌人：** normal=5, elite=10, boss=30（可被 EnemyConfig.currencyReward 覆盖）
-- **利息：** `floor(min(currency, interestThreshold) / interestRate)`，默认 threshold=50, rate=10，上限 5（可通过关卡编辑器调整）
+- **利息：** `floor(min(currency, interestThreshold) / interestRate)`，默认 threshold=50, rate=10（即上限 = floor(50/10) = 5，可通过关卡编辑器调整 threshold 和 rate）
 - **事件：** addCurrency / removeCurrency 效果
 
 ### 9.2 费用公式
@@ -534,6 +542,7 @@ evaluateEventWeight(event, run, data):
 - **自动存档：** 每次 `notify()` 后防抖 500ms
 - **同步刷写：** `beforeunload` 事件触发 `flushSync()`
 - **手动存档：** 暂离按钮
+- **胜利时自动清除存档：** 通关后 `autoSaveEnabled` 置为 false 并调用 `clearSave()`，避免残留无效存档
 
 ### 10.2 快照序列化
 
@@ -582,7 +591,8 @@ PvEMode.tsx (主编排)
   ├── RewardScreen.tsx        ← 奖励选择
   ├── ShopScreen.tsx          ← 商店
   ├── EventScreen.tsx         ← 事件展示
-  └── EndScreen.tsx           ← 通关/失败
+  ├── EndScreen.tsx           ← 通关/失败
+  └── DeckDialog.tsx          ← 查看卡组弹窗（支持删除卡牌）
 ```
 
 ### 11.2 通信模式
@@ -600,20 +610,24 @@ PvEMode.tsx (主编排)
 
 ### 11.4 编辑器系统
 
-所有编辑器通过 DebugPanel 的按钮打开，使用 `OverlayPanel` 弹层组件：
+所有编辑器通过 DebugPanel 的按钮打开，使用 `OverlayPanel` 弹层组件。
 
-| 编辑器 | 组件 | 功能 |
-|--------|------|------|
-| 费用编辑器 | DebugPanel 内置 | 编辑卡池中每张卡的商店费用，支持多选批量调整 |
-| 敌人编辑器 | `EnemyEditor.tsx` | 编辑敌人池（normal/elite/boss），配置修饰器、HP、货币奖励 |
-| 关卡编辑器 | `LevelEditor.tsx` | 配置层数、每层节点顺序、每个节点的敌人组合和固定事件 |
-| 权重编辑器 | `CardWeightEditor.tsx` | 可视化编辑卡牌关联权重，支持自动分析建议 |
-| 事件编辑器 | `EventEditor.tsx` | 编辑事件条件、效果、剧情文本、图片 |
+**EditorToolbar 通用组件：** 所有编辑器共享的工具栏（`EditorToolbar.tsx`），提供导出 JSON 文件、导入 JSON 文件、重置预设功能，带有 toast 成功通知和确认弹窗。使用泛型 `EditorToolbar<T>` 支持不同类型的数据导出/导入。在 Tauri 环境下使用原生文件对话框，浏览器环境使用标准 `<a>` 下载和 `<input type="file">`。
+
+**useAutoSave hook：** 敌人编辑器和事件编辑器使用 `useAutoSave` hook 实现自动保存（300ms debounce），无需手动点击保存按钮。
+
+| 编辑器 | 组件 | 功能 | 保存方式 |
+|--------|------|------|----------|
+| 费用编辑器 | DebugPanel 内置 | 编辑卡池中每张卡的商店费用，支持多选批量调整（全体 +1/-1） | 手动（应用按钮） |
+| 敌人编辑器 | `EnemyEditor.tsx` | 编辑敌人池（normal/elite/boss），配置修饰器、HP、货币奖励 | 自动保存 |
+| 关卡编辑器 | `LevelEditor.tsx` | 配置层数、每层节点顺序、每个节点的敌人组合和固定事件 | 手动（保存按钮） |
+| 权重编辑器 | `CardWeightEditor.tsx` | 可视化编辑卡牌关联权重，支持拖选、多选批量调节、自动分析建议 | 直接写入 |
+| 事件编辑器 | `EventEditor.tsx` | 编辑事件条件、效果、剧情文本、图片 | 自动保存 |
 
 **编辑器数据流：**
 ```
-编辑器组件 → configStore.setXxx() → localStorage/IndexedDB 持久化
-                                          ↓
+编辑器组件 → useAutoSave hook → configStore.setXxx() → localStorage/IndexedDB 持久化
+                                                              ↓
 PvEMode.createRunManager() ← configStore.getXxx() 读取
 ```
 
@@ -725,12 +739,15 @@ const ROGUELIKE_IMAGES: Record<number, string> = {
 
 5. 在 `createRoguelikeAssetsManager()` 中添加角色元数据（供战斗 UI 显示）。
 
+> **注意：** 自定义 Boss 的天赋牌会自动被 `ENEMY_CHARACTER_IDS` 排除（不进入卡池和权重分析）。如果需要 Boss 天赋牌出现在卡池中（如特殊 roguelike 事件），需将其定义在 `roguelike-data/src/overrides/` 中并使用独立 ID，而非标准天赋牌 ID 格式（2xxxxx）。
+
 ### 12.3 ID 命名规范
 
 | ID 范围 | 用途 |
 |---------|------|
 | 1xxx | 官方角色 |
-| 2xxxxx | 卡牌（天赋牌 2xxxxx，行动牌 3xxxxx） |
+| 2xxxxx | 天赋牌（如 215171 = 角色 1517 的天赋） |
+| 3xxxxx | 行动牌（事件牌、装备牌、共鸣牌等） |
 | 9xxx | Roguelike 自定义角色 |
 | 9xxxx | Roguelike 自定义技能 |
 | 9xxxxx | Roguelike 自定义状态 |
@@ -806,7 +823,15 @@ const ROGUELIKE_IMAGES: Record<number, string> = {
 { type: "skipNextNormalBattle" }
 ```
 
-### 13.4 模板变量
+### 13.4 回退事件
+
+如需将某事件加入回退池（无条件触发的兜底），在 `data.ts` 的 `FALLBACK_EVENT_IDS` 集合中添加其 ID。回退事件可重复触发，不计入 `completedEventIds`。
+
+```typescript
+const FALLBACK_EVENT_IDS = new Set([2999]);  // 添加新 ID 即可
+```
+
+### 13.5 模板变量
 
 在 `storyTemplate` 中使用 `{{variable}}` 语法，支持的变量见 [8.3 模板变量](#83-模板变量)。
 
@@ -882,7 +907,7 @@ c.eventArg[prop] is not a function
 `createSimpleAI()` 使用固定优先级：
 
 ```
-1. 被控制（无可用技能）→ 强制切人
+1. 被控制（有技能但全部不可用）→ 强制切人
 2. switchAfterSkill 阶段 → 切人（放完技能后轮转到下一个角色）
 3. 打出手牌（打出第一张可用手牌）
 4. 使用技能：元素爆发 > 元素战技 > 普通攻击
@@ -890,7 +915,9 @@ c.eventArg[prop] is not a function
 6. 结束回合
 ```
 
-**切人策略：** 按角色 ID 排序后的轮转（round-robin），从当前活跃角色的下一个开始尝试，跳过已倒下的角色。
+**切人策略：** 按角色 ID 升序排列后 round-robin 轮转。通过插入点算法实现：在排序列表中找最后一个 `< activeCharacterId` 的位置，取下一个位置作为目标（回绕到最小 ID）。跳过已倒下的角色。
+
+示例：`sorted=[101,103,105], active=103 → 目标=105`；`active=105 → 目标=101`（回绕）。
 
 ### 15.2 自定义 AI（未来扩展）
 

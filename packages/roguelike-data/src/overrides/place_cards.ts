@@ -71,7 +71,7 @@ export const InTheNameOfTheExtremeRoguelike = card(332044)
   .costSame(3)
   .do((c) => {
     // 获取对方当前骰子数量
-    const oppWho = flip(c.callerArea.who);
+    const oppWho = flip(c.self.who);
     const oppDiceCount = c.oppPlayer.dice.length;
     // 生成新的随机骰子
     const diceTypes = [

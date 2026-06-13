@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "prototype:card-pool": "gnx src/__prototype__/card-pool-test.ts"
   },
   "dependencies": {
     "@gi-tcg/core": "workspace:*",

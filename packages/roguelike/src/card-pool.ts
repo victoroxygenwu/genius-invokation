@@ -29,6 +29,7 @@ import {
   DEFAULT_CARD_POOL_IDS,
   SHOP_CARD_PRICE_MIN,
   SHOP_CARD_PRICE_MAX,
+  ENEMY_CHARACTER_IDS,
 } from "./data";
 
 // ============================================================
@@ -97,10 +98,11 @@ export function generateCardPool(data: GameData, characterIds: number[] = [], fl
     if (INITIAL_CARD_IDS.has(id)) continue;
     if (def.type === "status" || def.type === "combatStatus" || def.type === "summon") continue;
 
-    // 天赋牌（2xxxxx）：仅包含队伍中角色的天赋牌（obtainable=false，需先于 obtainable 检查）
+    // 天赋牌（2xxxxx）：仅包含队伍中角色的天赋牌，排除怪物天赋牌
     if (id >= 200000 && id < 300000) {
       const charIdStr = String(id).slice(1, 5);
       const charId = parseInt(charIdStr, 10);
+      if (ENEMY_CHARACTER_IDS.has(charId)) continue;
       if (teamCharacterSet.has(charId)) {
         pool.push({ cardId: id, name: getCardName(id) });
       }
@@ -165,6 +167,11 @@ export interface RollCardsOptions {
   cardCosts?: Record<number, number>;
 }
 
+/**
+ * 从卡池中随机抽取卡牌。
+ * - 有 GameData 时根据队伍角色动态生成卡池，否则使用默认卡池
+ * - 有 deck 时使用加权采样（卡牌关联权重），否则均匀采样
+ */
 export function rollCards(count: number, opts?: RollCardsOptions): { cardId: number; name: string }[] {
   const pool = opts?.data ? generateCardPool(opts.data, opts.characterIds, opts.floor) : DEFAULT_CARD_POOL;
   if (opts?.deck && opts.deck.length > 0) {
@@ -178,6 +185,10 @@ export function rollCards(count: number, opts?: RollCardsOptions): { cardId: num
 /** 商店卡牌默认费用（未设置自定义费用时使用） */
 export const DEFAULT_SHOP_CARD_COST = 5;
 
+/**
+ * 生成商店卡牌列表（在 rollCards 基础上附加费用）。
+ * 费用优先使用 opts.cardCosts 中的自定义值，否则使用 DEFAULT_SHOP_CARD_COST。
+ */
 export function rollShopCards(count: number, opts?: RollCardsOptions): { cardId: number; name: string; cost: number }[] {
   const cardCosts = opts?.cardCosts;
   return rollCards(count, opts).map((card) => ({

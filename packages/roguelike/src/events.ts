@@ -21,7 +21,7 @@ import type {
   RoguelikeRun,
 } from "./types";
 import { getCardName, sample } from "./utils";
-import { FALLBACK_EVENT_ID } from "./data";
+import { FALLBACK_EVENT_IDS } from "./data";
 import { CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS } from "./event-descriptors";
 
 // ============================================================
@@ -41,7 +41,8 @@ export const CARD_TAG_LABELS: Record<string, string> = {
 
 /**
  * 获取条件的匹配数量（用于权重缩放）。
- * 对于有计数意义的条件返回实际匹配数，否则返回 0 或 1。
+ * - 多值条件（hasCard, hasCharacterTag）返回实际匹配数量（可 > 1）
+ * - 二值条件（其余所有类型）返回 1（满足）或 0（不满足）
  */
 function getMatchCount(
   cond: EventConditionType,
@@ -139,7 +140,7 @@ export function evaluateEventWeight(
   return anyMet ? Math.max(totalWeight, 1) : 0;
 }
 
-/** 获取所有满足条件且未完成的事件及其权重（排除回退事件） */
+/** 获取所有满足条件（weight > 0）且未完成的事件及其权重（排除回退事件） */
 export function getEligibleEvents(
   events: EventDefinition[],
   run: RoguelikeRun,
@@ -147,7 +148,7 @@ export function getEligibleEvents(
 ): { event: EventDefinition; weight: number }[] {
   const completed = new Set(run.completedEventIds);
   return events
-    .filter((event) => event.id !== FALLBACK_EVENT_ID && !completed.has(event.id))
+    .filter((event) => !FALLBACK_EVENT_IDS.has(event.id) && !completed.has(event.id))
     .map((event) => ({ event, weight: evaluateEventWeight(event, run, data) }))
     .filter((e) => e.weight > 0);
 }
@@ -156,7 +157,12 @@ export function getEligibleEvents(
 // 事件选择
 // ============================================================
 
-/** 从候选事件中按权重随机选择一个 */
+/**
+ * 从候选事件中按权重随机选择一个。
+ * 使用累减法（cumulative subtraction）实现加权随机：
+ * 生成 [0, totalWeight) 的随机数，依次减去各事件权重，首次 ≤ 0 即命中。
+ * 末尾兜底返回最后一个事件，防止浮点精度导致的落空。
+ */
 export function selectEvent(
   eligible: { event: EventDefinition; weight: number }[],
 ): EventDefinition | null {
@@ -174,7 +180,13 @@ export function selectEvent(
 // 模板渲染
 // ============================================================
 
-/** 替换模板中的 {{variable}} 变量 */
+/**
+ * 替换模板中的 {{variable}} 变量。
+ * 支持两种语法：
+ * - {{key}} — 无参变量，如 {{playerNames}}, {{currency}}
+ * - {{key:arg}} — 带参数变量，arg 为数字 ID，如 {{cardName:332001}}, {{charName:1501}}
+ * 未识别的 key 保持原样不替换。
+ */
 export function renderEventText(
   template: string,
   run: RoguelikeRun,
@@ -223,6 +235,12 @@ export function applyEventEffects(
   }
 }
 
+/**
+ * 将单个事件效果应用到运行状态（直接修改 run）。
+ * 效果类型包括：货币增减、卡牌增删、角色 HP 修正、角色添加、
+ * 下场战斗 HP 修正、跳过战斗、选择删牌、随机卡牌等。
+ * 注意：chooseAndRemoveCard 仅设置标记，实际 UI 交互由调用方处理。
+ */
 function applySingleEffect(
   effect: EventEffectType,
   run: RoguelikeRun,

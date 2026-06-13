@@ -18,6 +18,7 @@ import { SafeImage } from "./SafeImage";
 import { useDragSelect } from "./useDragSelect";
 import { EntityGrid } from "./EntityGrid";
 import { CardWeightEditor } from "./CardWeightEditor";
+import { EditorToolbar } from "./EditorToolbar";
 import { EnemyEditor } from "./EnemyEditor";
 import { LevelEditor } from "./LevelEditor";
 import { EventEditor } from "./EventEditor";
@@ -77,16 +78,19 @@ export function DebugPanel(props: DebugPanelProps) {
     setSelectedCards(s);
   };
 
+  /** 是否已全选（且卡池非空） */
+  const isAllSelected = () => selectedCards().size === testCardPool().length && testCardPool().length > 0;
+
+  /** 对所有选中卡牌的费用做增量调整（保留差值，限制 1-10） */
+  const adjustAllCosts = (delta: number) => {
+    const costs = { ...cardCosts() };
+    for (const id of selectedCards()) costs[id] = Math.max(1, Math.min(10, (costs[id] ?? DEFAULT_SHOP_CARD_COST) + delta));
+    setCardCosts(costs);
+  };
+
   // 卡池网格拖拽选择
   const poolDrag = useDragSelect({
     guard: () => cardPoolMultiSelect(),
-    resolveId: (e) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-      if (!el) return null;
-      const item = el.closest("[data-card-id]") as HTMLElement | null;
-      if (!item) return null;
-      return Number(item.dataset.cardId) || null;
-    },
     isSelected: (id) => selectedCards().has(id),
     toggle: togglePoolCard,
   });
@@ -211,7 +215,16 @@ export function DebugPanel(props: DebugPanelProps) {
 
         {/* 卡池查看器 */}
         <Show when={activePanel() === "cardPool"}>
-          <OverlayPanel title="🃏 费用编辑" onClose={() => setActivePanel(null)}>
+          <OverlayPanel title="🃏 费用编辑" onClose={() => setActivePanel(null)}
+            titleActions={
+              <EditorToolbar
+                filename="card-costs.json"
+                getData={() => cardCosts()}
+                onImport={(data: Record<number, number>) => { if (data && typeof data === "object") setCardCosts(data); }}
+                onReset={() => setCardCosts({})}
+              />
+            }
+          >
             <div class="pve-cardpool">
               <h3>当前卡池（{testCardPool().length} 张）</h3>
               <div class="pve-cardpool-actions">
@@ -221,16 +234,20 @@ export function DebugPanel(props: DebugPanelProps) {
                 <Show when={cardPoolMultiSelect()}>
                   <span>已选: {selectedCards().size} 张</span>
                   <button class="editor-btn" onClick={() => {
-                    if (selectedCards().size === testCardPool().length) {
+                    if (isAllSelected()) {
                       setSelectedCards(new Set<number>());
                     } else {
                       setSelectedCards(new Set<number>(testCardPool().map((c) => c.cardId)));
                     }
-                  }}>{selectedCards().size === testCardPool().length ? "取消全选" : "全选"}</button>
+                  }}>{isAllSelected() ? "取消全选" : "全选"}</button>
                   <label>
                     设定费用:
                     <NumberInput value={batchCost()} min={1} max={10} onChange={setBatchCost} class="pve-batch-cost-input" />
                   </label>
+                  <Show when={isAllSelected()}>
+                    <button class="editor-btn" onClick={() => adjustAllCosts(-1)}>全体 -1</button>
+                    <button class="editor-btn" onClick={() => adjustAllCosts(1)}>全体 +1</button>
+                  </Show>
                   <button class="editor-btn editor-btn-save" onClick={() => {
                     const costs = { ...cardCosts() };
                     for (const id of selectedCards()) costs[id] = batchCost();

@@ -16,6 +16,7 @@
 import { type JSX } from "solid-js";
 import { exportJson, importJson } from "./configStore";
 import { createConfirm } from "./ConfirmModal";
+import { createToast } from "./createToast";
 
 // ============================================================
 // 统一编辑器工具栏
@@ -36,10 +37,21 @@ export interface EditorToolbarProps<T> {
 
 export function EditorToolbar<T>(props: EditorToolbarProps<T>) {
   const { confirm: customConfirm, Modal } = createConfirm();
+  const { showToast, Toast } = createToast({
+    style: { background: "linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)" },
+  });
+
+  const handleExport = async () => {
+    const ok = await exportJson(props.getData(), props.filename);
+    if (ok) showToast("导出成功");
+  };
 
   const handleImport = async () => {
     const data = await importJson<T>();
-    if (data) props.onImport(data);
+    if (data) {
+      props.onImport(data);
+      showToast("导入成功");
+    }
   };
 
   const handleReset = async () => {
@@ -50,10 +62,11 @@ export function EditorToolbar<T>(props: EditorToolbarProps<T>) {
 
   return (
     <div class="editor-toolbar">
-      <button class="editor-btn" onClick={() => exportJson(props.getData(), props.filename)}>导出</button>
+      <button class="editor-btn" onClick={handleExport}>导出</button>
       <button class="editor-btn" onClick={handleImport}>导入</button>
       {props.onReset && <button class="editor-btn" onClick={handleReset}>重置预设</button>}
       {props.children}
+      <Toast />
       <Modal />
     </div>
   );

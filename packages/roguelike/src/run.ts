@@ -15,7 +15,7 @@
 
 import { Game, type GameData, type DeckConfig, type GameState } from "@gi-tcg/core";
 import { createSimpleAI } from "./ai";
-import { ROGUELIKE_CONFIG, MAX_TEAM_SIZE, CHARACTER_CHOICE_COUNT, DEFAULT_EVENTS, FALLBACK_EVENT_ID } from "./data";
+import { ROGUELIKE_CONFIG, MAX_TEAM_SIZE, CHARACTER_CHOICE_COUNT, DEFAULT_EVENTS, FALLBACK_EVENT_IDS } from "./data";
 import { getEnemyHp, getEncounterCurrency, getRefreshCost, getDeleteCost, getInterest } from "./data";
 import { rollShopCards, rollCards } from "./card-pool";
 import { generateInitialDeck, generateCharacterCards, rollCharacterChoices, generateCharacterPool, generateFloorPath, getEncounterCharacterIds, type EnemyPool } from "./pool";
@@ -131,10 +131,12 @@ export class RoguelikeRunManager {
     };
   }
 
+  /** 注册状态变更回调（每次 notify 时触发，用于 SolidJS 响应式更新） */
   setOnUpdate(callback: (run: RoguelikeRun) => void): void {
     this.onUpdate = callback;
   }
 
+  /** 获取当前运行状态的只读引用 */
   getRun(): Readonly<RoguelikeRun> {
     return this.run;
   }
@@ -282,10 +284,12 @@ export class RoguelikeRunManager {
   // 追加角色
   // ============================================================
 
+  /** 获取可追加的角色选择列表 */
   getAvailableCharactersForAdd(): typeof this.run.availableCharacters {
     return rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, this.run.characters, this.getCharacterPool());
   }
 
+  /** 追加角色到队伍（生成对应卡牌并重新生成路径） */
   addCharacter(characterId: number): void {
     if (this.run.characters.length >= MAX_TEAM_SIZE) return;
     this.run.characters = [...this.run.characters, characterId];
@@ -387,10 +391,12 @@ export class RoguelikeRunManager {
       this.run.currentEvent = selected;
       this.setState("event");
     } else {
-      // 没有满足条件的事件，使用回退事件
+      // 没有满足条件的事件，从回退事件池中随机选取
       const allEvents = events.length > 0 ? events : DEFAULT_EVENTS;
-      const fallback = allEvents.find((e) => e.id === FALLBACK_EVENT_ID)
-        ?? DEFAULT_EVENTS.find((e) => e.id === FALLBACK_EVENT_ID)!;
+      const fallbacks = allEvents.filter((e) => FALLBACK_EVENT_IDS.has(e.id));
+      const fallback = fallbacks.length > 0
+        ? fallbacks[Math.floor(Math.random() * fallbacks.length)]
+        : DEFAULT_EVENTS.find((e) => FALLBACK_EVENT_IDS.has(e.id))!;
       this.run.currentEvent = { ...fallback };
       this.setState("event");
     }
@@ -401,8 +407,10 @@ export class RoguelikeRunManager {
     const event = this.run.currentEvent;
     if (!event) return false;
 
-    // 记录已完成事件
-    this.run.completedEventIds = [...this.run.completedEventIds, event.id];
+    // 记录已完成事件（回退事件可重复触发，不记录）
+    if (!FALLBACK_EVENT_IDS.has(event.id)) {
+      this.run.completedEventIds = [...this.run.completedEventIds, event.id];
+    }
 
     // 应用效果（排除 chooseAndRemoveCard，它已在事件确认前由玩家手动处理）
     const effectsToApply = event.effects.filter((e) => e.type !== "chooseAndRemoveCard");
@@ -437,6 +445,7 @@ export class RoguelikeRunManager {
     return event.effects.map((e) => getEffectDescription(e, this.data));
   }
 
+  /** 获取当前节点可选的遭遇列表 */
   getAvailableEncounters(): Encounter[] {
     return this.getCurrentNode()?.encounters ?? [];
   }
@@ -445,6 +454,7 @@ export class RoguelikeRunManager {
   // 遭遇与战斗
   // ============================================================
 
+  /** 选择一个遭遇进入战斗 */
   selectEncounter(encounterIndex: number): void {
     const node = this.getCurrentNode();
     if (!node) return;
@@ -454,6 +464,12 @@ export class RoguelikeRunManager {
     this.setState("battle");
   }
 
+  /**
+   * 战斗结束回调
+   * @param winner - 0=玩家胜利，1=敌方胜利
+   * - 胜利：发放货币奖励（含利息）、生成卡牌奖励
+   * - 失败：游戏结束、清除存档
+   */
   onBattleEnd(winner: 0 | 1): void {
     const encounter = this.run.currentEncounter;
     if (!encounter) return;
@@ -605,10 +621,15 @@ export class RoguelikeRunManager {
   // 奖励
   // ============================================================
 
+  /** 获取当前可领取的卡牌奖励列表 */
   getRewards(): Reward[] {
     return this.run.rewardItems;
   }
 
+  /**
+   * 领取奖励并推进。
+   * @param testMode - 测试模式下刷新奖励列表但不推进节点（用于调试）
+   */
   claimRewardAndFinish(rewardIndex: number, testMode = false): void {
     const reward = this.run.rewardItems[rewardIndex];
     if (reward) {
@@ -635,10 +656,12 @@ export class RoguelikeRunManager {
   // 商店
   // ============================================================
 
+  /** 获取当前商店物品列表 */
   getShopItems(): ShopItem[] { return this.run.shopItems; }
   getRefreshCost(): number { return getRefreshCost(this.run.refreshCount); }
   getDeleteCost(): number { return getDeleteCost(this.run.deleteCount); }
 
+  /** 刷新商店（扣费后重新生成商品），余额不足时返回 false */
   refreshShop(): boolean {
     const cost = this.getRefreshCost();
     if (this.run.currency < cost) return false;
@@ -649,6 +672,7 @@ export class RoguelikeRunManager {
     return true;
   }
 
+  /** 购买商店中的卡牌（扣费并加入卡组），余额不足时返回 false */
   buyCard(index: number): boolean {
     const item = this.run.shopItems[index];
     if (!item || this.run.currency < item.cost) return false;
@@ -660,6 +684,7 @@ export class RoguelikeRunManager {
     return true;
   }
 
+  /** 删除卡组中的指定卡牌（扣费），余额不足或索引无效时返回 false */
   deleteCard(deckIndex: number): boolean {
     const cost = this.getDeleteCost();
     if (this.run.currency < cost) return false;
@@ -672,6 +697,7 @@ export class RoguelikeRunManager {
     return true;
   }
 
+  /** 离开商店，推进到下一个路径节点 */
   finishShop(): void {
     this.run.shopItems = [];
     this.run.refreshCount = 0;
@@ -679,6 +705,7 @@ export class RoguelikeRunManager {
     this.processCurrentNode();
   }
 
+  /** 重新开始（清空存档并重置为初始状态） */
   restart(): void {
     this.pendingFirstCharacter = null;
     this.autoSaveEnabled = false;

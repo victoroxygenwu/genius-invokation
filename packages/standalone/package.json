@@ -10,7 +10,10 @@
     "build": "vite build",
     "build:roguelike": "vite build --config vite.roguelike.config.ts",
     "preview": "vite preview",
-    "bundle:images": "gnx scripts/bundle-images.ts"
+    "bundle:images": "gnx scripts/bundle-images.ts",
+    "tauri": "tauri",
+    "build:tauri": "tauri build",
+    "dev:tauri": "tauri dev"
   },
   "browserslist": "defaults",
   "dependencies": {
@@ -25,6 +28,9 @@
     "@gi-tcg/state-editor": "workspace:*",
     "@gi-tcg/utils": "workspace:*",
     "@gi-tcg/web-ui-core": "workspace:*",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
     "@vercel/analytics": "^1.2.0",
     "core-js": "3.38.1",
     "merge-error-cause": "^5.0.2",

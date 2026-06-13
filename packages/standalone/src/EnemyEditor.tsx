@@ -4,7 +4,7 @@ import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
   ENCOUNTER_CURRENCY, BASE_HP, TENSHUKAKU_ENTITY_ID,
   querySupportCards, queryArtifactCards, queryFoodCards,
-  type EnemyConfig, type EnemyModifier, type EnemyModifierType, type CardEntry,
+  type EnemyConfig, type EnemyModifier, type EnemyModifierType, type CardEntry, type EnemyPool,
 } from "@gi-tcg/roguelike";
 import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
@@ -13,7 +13,9 @@ import { OverlayPanel } from "./OverlayPanel";
 import { SafeImage } from "./SafeImage";
 import { NumberInput } from "./NumberInput";
 import { useEditableList } from "./useEditableList";
+import { useAutoSave } from "./useAutoSave";
 import { CardImageSelect } from "./CardImageSelect";
+import defaultEnemies from "./config/enemies.json";
 
 const data = getRoguelikeData(CURRENT_VERSION);
 
@@ -162,10 +164,9 @@ export function EnemyEditor(p: EnemyEditorProps) {
     return <EnemySubEditor config={p.subConfig} label={p.subLabel} onSave={p.onSubSave} onClose={p.onClose} />;
   }
 
-  // 独立模式：编辑全局怪物池
+  // 独立模式：编辑全局怪物池（自动保存）
   const [tab, setTab] = createSignal<Tab>("normal");
-  const pool = configStore.enemyPool();
-  const [pools, setPools] = createSignal(structuredClone(pool));
+  const [pools, setPools] = useAutoSave(configStore.enemyPool, configStore.setEnemyPool, defaultEnemies as EnemyPool);
 
   const list = createMemo(() => pools()[tab()]);
   const setList = (l: EnemyConfig[]) => setPools((prev) => ({ ...prev, [tab()]: l }));
@@ -175,13 +176,6 @@ export function EnemyEditor(p: EnemyEditorProps) {
     () => ({ characterId: 0, hpOverride: null, currencyReward: null, modifiers: [{ type: "supportCard" as const, value: TENSHUKAKU_ENTITY_ID }] }),
   );
 
-  const doSave = () => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    configStore.setEnemyPool(pools());
-    p.onSave();
-    p.onClose();
-  };
-
   const tabs: { k: Tab; l: string }[] = [
     { k: "normal", l: `普通 (${pools().normal.length})` },
     { k: "elite", l: `精英 (${pools().elite.length})` },
@@ -189,15 +183,15 @@ export function EnemyEditor(p: EnemyEditorProps) {
   ];
 
   return (
-    <OverlayPanel title="👾 敌人编辑" onClose={p.onClose}
+    <OverlayPanel title="👾 敌人编辑" onClose={() => { p.onSave(); p.onClose(); }}
       titleActions={
         <EditorToolbar
           filename="enemy-config.json"
           getData={pools}
           onImport={(d: { normal: EnemyConfig[]; elite: EnemyConfig[]; boss: EnemyConfig[] }) => setPools({ normal: d.normal ?? [], elite: d.elite ?? [], boss: d.boss ?? [] })}
-          onReset={() => { configStore.resetEnemyPool(); setPools(configStore.enemyPool()); }}
+          onReset={() => { setPools(structuredClone(defaultEnemies) as EnemyPool); }}
         >
-          <button class="editor-btn editor-btn-save" onClick={doSave}>保存</button>
+          <span class="editor-autosave-hint">✓ 自动保存</span>
         </EditorToolbar>
       }
     >

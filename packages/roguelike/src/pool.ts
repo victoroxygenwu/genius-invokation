@@ -54,7 +54,7 @@ export function querySupportCards(data: GameData): Record<string, CardEntry[]> {
   return groups;
 }
 
-/** 按实体类型和标签查询卡牌 */
+/** 按实体类型和标签查询卡牌（内部通用查询，被 queryFoodCards 等调用） */
 function queryCardsByTypeAndTag(data: GameData, type: string, tag: string): CardEntry[] {
   const cards: CardEntry[] = [];
   for (const [id, def] of data.entities) {
@@ -88,6 +88,14 @@ export function generateCharacterPool(data: GameData): CharacterPoolEntry[] {
   return pool;
 }
 
+/**
+ * 随机选择可选角色
+ * @param count - 选择数量
+ * @param data - 游戏数据
+ * @param excludeIds - 排除的角色 ID（已选/已拥有）
+ * @param cachedPool - 缓存的角色池（避免重复生成）
+ * @returns 随机选择的角色列表
+ */
 export function rollCharacterChoices(count: number, data: GameData, excludeIds: number[] = [], cachedPool?: CharacterPoolEntry[]): CharacterPoolEntry[] {
   const pool = cachedPool ?? generateCharacterPool(data);
   const excluded = new Set(excludeIds);
@@ -99,7 +107,11 @@ export function rollCharacterChoices(count: number, data: GameData, excludeIds: 
 // 初始卡组生成
 // ============================================================
 
-/** 根据角色标签生成对应卡牌 */
+/**
+ * 根据角色标签生成对应卡牌
+ * - 武器卡：按武器类型匹配，无匹配时使用默认武器
+ * - 圣遗物卡：按元素类型匹配（可选）
+ */
 function cardsForCharacter(tags: string[]): number[] {
   const cards: number[] = [];
   const weaponTag = tags.find((t) => WEAPON_CARD_MAP[t] !== undefined);
@@ -109,7 +121,12 @@ function cardsForCharacter(tags: string[]): number[] {
   return cards;
 }
 
-/** 根据角色标签列表生成初始卡组 */
+/**
+ * 根据角色标签列表生成初始卡组
+ * - 每个角色：武器卡 + 圣遗物卡（如有）
+ * - 额外添加：蒙德土豆饼 ×2
+ * - "最好的伙伴 ×2" 由事件 #2001 初遇派蒙提供，不再初始赠送
+ */
 export function generateInitialDeck(characterTagsList: string[][]): number[] {
   const deck = characterTagsList.flatMap(cardsForCharacter);
   // 最好的伙伴 ×2 由事件 #2001 初遇派蒙提供，不再初始赠送
@@ -117,7 +134,11 @@ export function generateInitialDeck(characterTagsList: string[][]): number[] {
   return deck;
 }
 
-/** 追加角色时生成对应卡牌 */
+/**
+ * 追加角色时生成对应卡牌
+ * @param tags - 角色标签列表（包含元素和武器类型）
+ * @returns 武器卡 + 圣遗物卡（如有）
+ */
 export function generateCharacterCards(tags: string[]): number[] {
   return cardsForCharacter(tags);
 }
@@ -135,7 +156,7 @@ export function createEncounter(type: EncounterType, configs: EnemyConfig | Enem
   return { type, configs: configArray };
 }
 
-/** 从遭遇配置中获取显示名称 */
+/** 从遭遇配置中获取显示名称（多个敌人用 " & " 连接，无有效 ID 时返回 "Unknown Enemy"） */
 export function getEncounterName(encounter: Encounter, nameFn?: (id: number) => string): string {
   const ids = encounter.configs.filter((c) => c?.characterId > 0).map((c) => c.characterId);
   if (ids.length === 0) return "Unknown Enemy";
@@ -152,7 +173,12 @@ export function getEncounterCharacterIds(encounter: Encounter): number[] {
 // 遭遇池（从默认敌人池动态生成）
 // ============================================================
 
-/** 按遭遇类型采样敌人并生成遭遇列表 */
+/**
+ * 按遭遇类型从敌人池中随机采样并生成遭遇列表。
+ * @param type - 遭遇难度类型（normal/elite/boss）
+ * @param count - 采样数量
+ * @param enemyPool - 自定义敌人池（可选，为空则使用 DEFAULT_ENEMY_POOL）
+ */
 function sampleEncounters(type: EncounterType, count: number, enemyPool?: EnemyConfig[]): Encounter[] {
   const pool = enemyPool ?? DEFAULT_ENEMY_POOL[type as keyof typeof DEFAULT_ENEMY_POOL];
   return sample(pool, count).map((config) => createEncounter(type, config));
@@ -162,6 +188,20 @@ function sampleEncounters(type: EncounterType, count: number, enemyPool?: EnemyC
 // 楼层路径生成
 // ============================================================
 
+/**
+ * 生成楼层路径
+ * @param pathTypes - 路径节点类型数组
+ * @param encounterConfigs - 预配置的遭遇（可选，按 pathTypes 位置索引，null 表示从默认池随机）
+ * @param enemyPool - 自定义敌人池（可选，按遭遇类型分组）
+ * @param fixedEventIds - 事件节点的固定事件 ID（按 event 节点出现顺序索引，非路径位置索引）
+ * @returns 路径节点数组
+ *
+ * 处理逻辑：
+ * - shop 节点：无遭遇
+ * - event 节点：从 fixedEventIds 按序取固定事件 ID
+ * - 战斗节点：优先使用 encounterConfigs 预配置，否则从 enemyPool 随机采样
+ * - boss 节点默认 1 个遭遇，其他战斗节点默认 2 个
+ */
 export function generateFloorPath(
   pathTypes: NodeType[],
   encounterConfigs?: (EnemyConfig[][] | null)[],

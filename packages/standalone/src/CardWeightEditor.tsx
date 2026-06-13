@@ -21,12 +21,10 @@ import {
   type SuggestedPair,
 } from "@gi-tcg/roguelike";
 import { getCardName } from "./roguelike-assets";
-import {
-  configStore,
-  exportJson, importJson,
-} from "./configStore";
+import { configStore } from "./configStore";
 import { SafeImage } from "./SafeImage";
 import { useDragSelect } from "./useDragSelect";
+import { EditorToolbar } from "./EditorToolbar";
 
 export interface CardWeightEditorProps {
   cardPool: { cardId: number; name: string }[];
@@ -282,16 +280,6 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     exitMultiSelect();
   };
 
-  /** 通过 elementFromPoint 从 pointer 事件获取卡牌 ID（排除滑块/数字输入） */
-  const getCardIdFromPointer = (e: PointerEvent): number | null => {
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    if (!el) return null;
-    if (el.closest(".pve-weight-slider, .pve-weight-num-input")) return null;
-    const item = el.closest("[data-card-id]") as HTMLElement | null;
-    if (!item) return null;
-    return Number(item.dataset.cardId) || null;
-  };
-
   /** 退出多选模式 */
   const exitMultiSelect = () => {
     setMultiSelectMode(false);
@@ -313,7 +301,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   // 顶部网格拖拽：添加模式下批量添加/取消关联
   const gridDrag = useDragSelect({
     guard: () => mode() === "add" && mainCard() !== 0,
-    resolveId: getCardIdFromPointer,
+    excludeSelectors: ".pve-weight-slider, .pve-weight-num-input",
     excludeId: mainCard,
     isSelected: (id) => manager.getDirectCardWeight(mainCard(), id) > 0,
     toggle: (id) => {
@@ -326,7 +314,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   // 下方列表拖拽：多选模式下批量选中/取消
   const listDrag = useDragSelect({
     guard: () => multiSelectMode(),
-    resolveId: getCardIdFromPointer,
+    excludeSelectors: ".pve-weight-slider, .pve-weight-num-input",
     isSelected: (id) => selectedCards().has(id),
     toggle: toggleSelect,
   });
@@ -359,50 +347,40 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
     manager.endBatch();
   };
 
-  /** 导出当前配置为 JSON 文件下载 */
-  const exportConfig = () => {
-    exportJson({ version: 1, pairs: allWeightPairs() }, "card-weights.json");
-  };
-
-  /** 从 JSON 文件导入配置 */
-  const importConfig = async () => {
-    const config = await importJson<{ version?: number; pairs?: any[] }>();
-    if (!config) return;
-    if (!config.pairs || !Array.isArray(config.pairs)) {
-      alert("无效的配置文件");
-      return;
-    }
-    manager.loadPairs(config.pairs);
-  };
-
   return (
     <div class="pve-debug-section">
-      {/* 导入/导出/保存按钮 */}
-      <div class="pve-weight-io-bar">
-        <button onClick={exportConfig} class="editor-btn">导出</button>
-        <button onClick={importConfig} class="editor-btn">导入</button>
-        <button onClick={() => { if (confirm("确定要重置为预设数据吗？当前修改将丢失。")) manager.resetToDefault(); }} class="editor-btn">重置预设</button>
-        <button onClick={() => { alert("已自动保存到本地存储"); }} class="editor-btn editor-btn-save">保存</button>
-      </div>
+      {/* 顶部固定区域：工具栏 + 主体信息 */}
+      <div class="pve-weight-sticky-top">
+        <EditorToolbar
+          filename="card-weights.json"
+          getData={() => ({ version: 1, pairs: allWeightPairs() })}
+          onImport={(config: { version?: number; pairs?: any[] }) => {
+            if (config.pairs && Array.isArray(config.pairs)) manager.loadPairs(config.pairs);
+          }}
+          onReset={() => manager.resetToDefault()}
+        >
+          <span class="editor-autosave-hint">✓ 自动保存</span>
+        </EditorToolbar>
 
-      <Show when={mainCard() !== 0}>
-        <div class="pve-weight-top-bar">
-          <div class="pve-weight-main-info">
-            <span>主体: <b>{getCardName(mainCard())}</b></span>
-            <span class="pve-weight-main-count">({relatedCards().length} 关联)</span>
-            <Show when={mode() === "add"}>
-              <button onClick={() => setMainCard(0)} class="btn-sm pve-weight-clear">重选</button>
-            </Show>
+        <Show when={mainCard() !== 0}>
+          <div class="pve-weight-top-bar">
+            <div class="pve-weight-main-info">
+              <span>主体: <b>{getCardName(mainCard())}</b></span>
+              <span class="pve-weight-main-count">({relatedCards().length} 关联)</span>
+              <Show when={mode() === "add"}>
+                <button onClick={() => setMainCard(0)} class="btn-sm pve-weight-clear">重选</button>
+              </Show>
+            </div>
+            <div class="pve-weight-mode-bar">
+              <button class={`pve-weight-mode-btn ${mode() === "edit" ? "pve-weight-mode-active" : ""}`} onClick={() => setMode("edit")}>✏️ 编辑</button>
+              <button class={`pve-weight-mode-btn ${mode() === "add" ? "pve-weight-mode-active" : ""}`} onClick={() => setMode("add")}>➕ 添加</button>
+            </div>
           </div>
-          <div class="pve-weight-mode-bar">
-            <button class={`pve-weight-mode-btn ${mode() === "edit" ? "pve-weight-mode-active" : ""}`} onClick={() => setMode("edit")}>✏️ 编辑</button>
-            <button class={`pve-weight-mode-btn ${mode() === "add" ? "pve-weight-mode-active" : ""}`} onClick={() => setMode("add")}>➕ 添加</button>
-          </div>
-        </div>
-      </Show>
-      <Show when={mainCard() === 0}>
-        <p class="pve-weight-hint">点击一张卡牌作为关联主体</p>
-      </Show>
+        </Show>
+        <Show when={mainCard() === 0}>
+          <p class="pve-weight-hint">点击一张卡牌作为关联主体</p>
+        </Show>
+      </div>
 
       <div class="card-grid pve-weight-grid"
         onPointerDown={gridDrag.onPointerDown}
@@ -442,7 +420,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
       </div>
 
       <Show when={mainCard() !== 0 && relatedCards().length > 0}>
-        {/* 工具栏 */}
+        {/* 多选工具栏 */}
         <div class="pve-weight-toolbar">
           <Show when={!multiSelectMode()}>
             <button onClick={enterMultiSelect} class="btn-sm pve-weight-toolbar-btn">☑ 多选</button>
@@ -480,7 +458,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         >
           <For each={relatedCards()}>
             {(rel) => (
-              <div class={`pve-weight-rel-item${selectedCards().has(rel.id) ? " pve-weight-rel-selected" : ""}`}
+              <div class={`pve-weight-rel-item${selectedCards().has(rel.id) ? " pve-weight-rel-selected" : ""}${rel.source === "suggested" ? " pve-weight-rel-suggested" : ""}`}
                 data-card-id={rel.id}
               >
                 <Show when={multiSelectMode()}>
@@ -506,7 +484,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     updateWeight(rel.id, snapped);
                   }}
                 />
-                <button onClick={() => removeRelation(rel.id)} class="btn-sm btn-sm-red pve-weight-remove">✕</button>
+                <button onClick={() => removeRelation(rel.id)} onPointerDown={(e) => e.stopPropagation()} class="btn-sm btn-sm-red pve-weight-remove">✕</button>
               </div>
             )}
           </For>

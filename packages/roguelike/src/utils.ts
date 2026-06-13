@@ -21,13 +21,6 @@ import { DEFAULT_ASSETS_MANAGER } from "@gi-tcg/assets-manager";
 
 const IS_TAURI = "__TAURI_INTERNALS__" in globalThis;
 
-/**
- * Tauri 本地图片基础路径。
- * 可通过全局变量 __TAURI_ASSETS_BASE__ 自定义（默认 "asset://localhost"）。
- */
-const TAURI_ASSETS_BASE: string =
-  (globalThis as any).__TAURI_ASSETS_BASE__ ?? "asset://localhost";
-
 // ============================================================
 // 卡牌/角色名称和图片
 // ============================================================
@@ -50,12 +43,12 @@ export function getCardDescription(id: number): string {
 /**
  * 获取卡牌/角色图片 URL。
  *
- * - Tauri 模式：返回本地资源路径 `asset://localhost/images/cards/{id}.webp`
+ * - Tauri 模式：返回本地相对路径 `/images/cards/{id}.webp`（从 dist-resources 复制到前端目录）
  * - Web 模式：返回远程 API URL
  */
 export function getImageUrl(id: number): string {
   if (IS_TAURI) {
-    return `${TAURI_ASSETS_BASE}/images/cards/${id}.webp`;
+    return `/images/cards/${id}.webp`;
   }
   return DEFAULT_ASSETS_MANAGER.getImageUrlSync(id, { type: "cardFace" });
 }
@@ -106,7 +99,10 @@ export function weightedSample<T>(items: T[], weights: number[], count: number):
 // 通用 ID 验证
 // ============================================================
 
-/** 通用 ID 验证：检查 ids 中的每个 ID 是否存在于 map 中 */
+/**
+ * 通用 ID 验证：检查 ids 中的每个 ID 是否存在于 map 中。
+ * @returns 缺失 ID 的错误消息数组，全部存在时返回空数组。
+ */
 export function validateIds(
   ids: Iterable<number>,
   map: ReadonlyMap<number, unknown>,

@@ -343,7 +343,7 @@
 /* selected state handled by .card-item-selected */
 
 .pve-cardpool-cost {
-  font-size: 0.55rem;
+  font-size: 0.7rem;
   color: var(--color-warning);
   margin-top: 0.1rem;
 }
@@ -389,7 +389,7 @@
   border-radius: 4px;
 }
 
-.pve-cardpool-item span {
+.pve-cardpool-item > span:not(.pve-cardpool-cost) {
   font-size: 0.55rem;
   color: var(--color-text-muted);
   margin-top: 0.2rem;
@@ -543,10 +543,20 @@
   padding: 0.15rem 0.4rem;
 }
 /* 顶部栏：主体卡信息 + 模式切换 */
+/* 权重编辑顶部固定区域（工具栏 + 主体信息） */
+.pve-weight-sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #1e293b;
+  padding-bottom: 0.3rem;
+}
+
 .pve-weight-top-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: 0.5rem;
   margin-bottom: 0.75rem;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -591,7 +601,7 @@
   margin-top: 0.5rem;
   margin-bottom: 0.3rem;
   padding: 0.3rem 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: #1e293b;
   border-radius: 6px;
 }
 
@@ -603,7 +613,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.5rem;
-  background: rgba(56, 189, 248, 0.08);
+  background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(56, 189, 248, 0.2);
   border-radius: 6px;
   margin-bottom: 0.3rem;
@@ -664,6 +674,14 @@
 .pve-weight-rel-selected {
   background: rgba(56, 189, 248, 0.08);
   border-left: 2px solid var(--color-primary);
+}
+
+.pve-weight-rel-suggested {
+  opacity: 0.55;
+}
+
+.pve-weight-rel-suggested:hover {
+  opacity: 0.8;
 }
 
 .pve-weight-rel-check {
@@ -1161,7 +1179,7 @@
 .roguelike-header {
   background: rgba(0, 0, 0, 0.3);
   padding: 1rem 2rem;
-  text-align: center;
+  text-align: left;
 }
 
 .roguelike-header h1 {
@@ -1517,6 +1535,13 @@
 
 .editor-btn-save:hover {
   background: rgba(16, 185, 129, 0.3);
+}
+
+.editor-autosave-hint {
+  color: var(--color-success);
+  font-size: 0.8rem;
+  opacity: 0.8;
+  pointer-events: none;
 }
 
 .editor-btn-blue {
@@ -2486,8 +2511,157 @@
 
 .pve-reward-card:hover .pve-card-tooltip,
 .pve-shop-item:hover .pve-card-tooltip,
-.pve-deck-item:hover .pve-card-tooltip {
+.pve-deck-item:hover .pve-card-tooltip,
+.pve-deck-dialog-item:hover .pve-card-tooltip {
   display: block;
+}
+
+/* ============================================================
+   查看卡组弹窗
+   ============================================================ */
+
+.pve-deck-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: pve-fade-in 0.2s ease-out;
+}
+
+.pve-deck-dialog {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: pve-modal-in 0.2s ease-out;
+}
+
+.pve-deck-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pve-deck-dialog-header h3 {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 1.1rem;
+}
+
+.pve-deck-dialog-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.pve-deck-dialog-close:hover {
+  color: #e2e8f0;
+}
+
+.pve-deck-dialog-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+}
+
+.pve-deck-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.pve-deck-dialog-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pve-deck-dialog-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.pve-deck-dialog-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.pve-deck-dialog-name {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #e2e8f0;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.pve-deck-dialog-footer {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pve-btn-deck {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.pve-btn-deck:hover {
+  background: rgba(56, 189, 248, 0.3);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.pve-deck-dialog-item-deleting {
+  outline: 2px solid #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.pve-deck-dialog-delete-hint {
+  position: absolute;
+  bottom: 4px;
+  font-size: 0.65rem;
+  color: #ef4444;
+}
+
+.pve-deck-dialog-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e2e8f0;
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
 }
 
 

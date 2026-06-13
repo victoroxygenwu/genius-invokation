@@ -37,6 +37,8 @@ import { RewardScreen } from "./pve/RewardScreen";
 import { ShopScreen } from "./pve/ShopScreen";
 import { EventScreen } from "./pve/EventScreen";
 import { EndScreen } from "./pve/EndScreen";
+import { DeckDialog } from "./pve/DeckDialog";
+import { createToast } from "./createToast";
 
 const data = getRoguelikeData(CURRENT_VERSION);
 const CHARACTER_POOL = generateCharacterPool(data).sort((a, b) => a.id - b.id);
@@ -62,15 +64,11 @@ export function PvEMode(props: PvEModeProps) {
   const [battleActive, setBattleActive] = createSignal(false);
   const [testBattleMode, setTestBattleMode] = createSignal(false);
 
-  // ---- Toast 通知（单信号：空字符串=隐藏） ----
-  const [toast, setToast] = createSignal("");
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
-  const showToast = (msg: string) => {
-    if (toastTimer) clearTimeout(toastTimer);
-    setToast(msg);
-    toastTimer = setTimeout(() => { toastTimer = null; setToast(""); }, 2000);
-  };
-  onCleanup(() => { if (toastTimer) clearTimeout(toastTimer); });
+  // ---- 查看卡组弹窗 ----
+  const [showDeckDialog, setShowDeckDialog] = createSignal(false);
+
+  // ---- Toast 通知 ----
+  const { showToast, Toast } = createToast();
 
   const GAME_SAVE_KEY = "gi-tcg-game-save";
   const saveStorage = new SimpleStorageAdapter("saves");
@@ -181,10 +179,13 @@ export function PvEMode(props: PvEModeProps) {
 
   return (
     <div class="pve-mode">
-      <Show when={viewMode() === "game" && !battleActive() && canPause() && debugMode() === "off"}>
+      <Show when={viewMode() === "game" && !battleActive() && canPause()}>
         <div class="pve-save-bar">
-          <button class="pve-btn-pause" onClick={pauseGame}>暂离</button>
-          <button class="pve-btn-quit" onClick={quitGame}>退出</button>
+          <button class="pve-btn-deck" onClick={() => setShowDeckDialog(true)}>查看卡组</button>
+          <Show when={debugMode() === "off"}>
+            <button class="pve-btn-pause" onClick={pauseGame}>暂离</button>
+            <button class="pve-btn-quit" onClick={quitGame}>退出</button>
+          </Show>
         </div>
       </Show>
       <Switch>
@@ -293,8 +294,13 @@ export function PvEMode(props: PvEModeProps) {
           <EndScreen state="gameOver" run={run} onRestart={restart} onGoHome={goHome} />
         </Match>
       </Switch>
-      <Show when={toast()}>
-        <div class="pve-toast">{toast()}</div>
+      <Toast />
+      <Show when={showDeckDialog()}>
+        <DeckDialog
+          run={run}
+          show={showDeckDialog}
+          onClose={() => setShowDeckDialog(false)}
+        />
       </Show>
       <ConfirmModalComponent />
     </div>

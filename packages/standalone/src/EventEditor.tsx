@@ -13,6 +13,7 @@ import { OverlayPanel } from "./OverlayPanel";
 import { EditorToolbar } from "./EditorToolbar";
 import { NumberInput } from "./NumberInput";
 import { useEditableList } from "./useEditableList";
+import { useAutoSave } from "./useAutoSave";
 import { CardImageSelect } from "./CardImageSelect";
 
 const data = getRoguelikeData(CURRENT_VERSION);
@@ -365,10 +366,11 @@ export function EventEditor(p: EventEditorProps) {
     return <EventSubEditor event={p.subEvent} label={p.subLabel} onSave={p.onSubSave} onClose={p.onClose} />;
   }
 
-  // 独立模式：编辑全局事件列表
-  const initialEvents = configStore.events();
-  const [events, setEventsLocal] = createSignal<EventDefinition[]>(
-    initialEvents.length > 0 ? structuredClone(initialEvents) : structuredClone(DEFAULT_EVENTS)
+  // 独立模式：编辑全局事件列表（自动保存）
+  const [events, setEventsLocal] = useAutoSave(
+    () => { const ev = configStore.events(); return ev.length > 0 ? ev : DEFAULT_EVENTS; },
+    configStore.setEvents,
+    DEFAULT_EVENTS,
   );
 
   const { add: addEvent, update: updateEvent, remove: removeEvent } = useEditableList(
@@ -386,23 +388,16 @@ export function EventEditor(p: EventEditorProps) {
     },
   );
 
-  const doSave = () => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    configStore.setEvents(events());
-    p.onSave();
-    p.onClose();
-  };
-
   return (
-    <OverlayPanel title="📜 事件编辑" onClose={p.onClose} maxWidth="900px"
+    <OverlayPanel title="📜 事件编辑" onClose={() => { p.onSave(); p.onClose(); }} maxWidth="900px"
       titleActions={
         <EditorToolbar
           filename="event-config.json"
           getData={events}
           onImport={(d: EventDefinition[]) => setEventsLocal(d)}
-          onReset={() => { setEventsLocal([...DEFAULT_EVENTS]); configStore.setEvents([...DEFAULT_EVENTS]); }}
+          onReset={() => { setEventsLocal(structuredClone(DEFAULT_EVENTS)); }}
         >
-          <button class="editor-btn editor-btn-save" onClick={doSave}>保存</button>
+          <span class="editor-autosave-hint">✓ 自动保存</span>
         </EditorToolbar>
       }
     >

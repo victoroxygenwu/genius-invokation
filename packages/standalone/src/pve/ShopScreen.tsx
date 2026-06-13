@@ -1,10 +1,11 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, createMemo } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { RoguelikeRun } from "@gi-tcg/roguelike";
 import { getRefreshCost, getDeleteCost, getCardDescription } from "@gi-tcg/roguelike";
-import { getCardName } from "../roguelike-assets";
 import { SafeImage } from "../SafeImage";
 import type { DebugMode } from "./HomeScreen";
+import { DeckDialog } from "./DeckDialog";
+import { sortByCardId } from "./utils";
 
 export interface ShopScreenProps {
   run: Accessor<RoguelikeRun>;
@@ -18,25 +19,20 @@ export interface ShopScreenProps {
 }
 
 export function ShopScreen(props: ShopScreenProps) {
-  const [showDeck, setShowDeck] = createSignal(false);
-  const [deletingIndex, setDeletingIndex] = createSignal(-1);
+  const [showDeleteDialog, setShowDeleteDialog] = createSignal(false);
 
-  const deleteCard = (i: number) => {
+  // 按卡牌ID排序的商品列表（带原始索引）
+  const sortedShopItems = createMemo(() => sortByCardId(props.run().shopItems));
+
+  const handleDeleteCard = (index: number) => {
     const r = props.run();
     const cost = getDeleteCost(r.deleteCount);
     if (r.currency < cost) {
       props.onShowToast?.("费用不足！");
       return;
     }
-    if (deletingIndex() === i) {
-      props.onDeleteCard(i);
-      setDeletingIndex(-1);
-    } else {
-      setDeletingIndex(i);
-    }
+    props.onDeleteCard(index);
   };
-
-  const cancelDelete = () => setDeletingIndex(-1);
 
   return (
     <div class="pve-shop">
@@ -49,20 +45,20 @@ export function ShopScreen(props: ShopScreenProps) {
       </div>
       <div class="pve-shop-actions">
         <button onClick={props.onRefreshShop} disabled={props.run().currency < getRefreshCost(props.run().refreshCount)}>刷新商店</button>
-        <button onClick={() => setShowDeck(!showDeck())}>{showDeck() ? "隐藏卡组" : "查看卡组"}</button>
-        <button onClick={() => { setDeletingIndex(-1); props.onFinishShop(); }}>离开商店</button>
+        <button onClick={() => setShowDeleteDialog(true)}>删除卡牌</button>
+        <button onClick={props.onFinishShop}>离开商店</button>
         <Show when={props.debugMode() !== "off"}>
           <button onClick={props.onGoHome}>返回首页</button>
         </Show>
       </div>
       <div class="pve-shop-grid">
-        <For each={props.run().shopItems}>
-          {(item, index) => {
+        <For each={sortedShopItems()}>
+          {(item) => {
             const desc = getCardDescription(item.cardId);
             return (
             <button
               class="pve-shop-item"
-              onClick={() => props.onBuyCard(index())}
+              onClick={() => props.onBuyCard(item.originalIndex)}
               disabled={props.run().currency < item.cost}
             >
               <SafeImage class="pve-card-img" entityId={item.cardId} alt={item.name} loading="lazy" />
@@ -74,34 +70,13 @@ export function ShopScreen(props: ShopScreenProps) {
           }}
         </For>
       </div>
-      <Show when={showDeck()}>
-        <div class="pve-deck-section">
-          <h3>当前卡组 ({props.run().deck.length} 张)</h3>
-          <div class="pve-deck-items">
-            <For each={props.run().deck}>
-              {(cardId, index) => {
-                const desc = getCardDescription(cardId);
-                return (
-                <button
-                  class={`pve-deck-item ${deletingIndex() === index() ? "pve-deck-item-deleting" : ""}`}
-                  onClick={() => deleteCard(index())}
-                >
-                  <SafeImage class="pve-deck-img" entityId={cardId} alt={getCardName(cardId)} loading="lazy" />
-                  <div class="pve-deck-name">{getCardName(cardId)}</div>
-                  <Show when={deletingIndex() === index()}>
-                    <div class="pve-deck-confirm">再点确认删除</div>
-                  </Show>
-                  {desc && <div class="pve-card-tooltip">{desc}</div>}
-                </button>
-                );
-              }}
-            </For>
-          </div>
-          <Show when={deletingIndex() >= 0}>
-            <button class="pve-deck-cancel" onClick={cancelDelete}>取消删除</button>
-          </Show>
-        </div>
-      </Show>
+      <DeckDialog
+        run={props.run}
+        show={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onDeleteCard={handleDeleteCard}
+        showDelete={true}
+      />
     </div>
   );
 }

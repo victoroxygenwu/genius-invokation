@@ -266,17 +266,69 @@ export const configStore = new ConfigStore(createBestStorage());
 // JSON 文件工具（独立于 configStore）
 // ============================================================
 
-export function exportJson(data: unknown, filename: string) {
+const IS_TAURI = "__TAURI_INTERNALS__" in globalThis;
+
+type TauriModules = { dialog: any; fs: any };
+let tauriModulesCache: TauriModules | null | undefined;
+
+async function loadTauriModules(): Promise<TauriModules | null> {
+  if (tauriModulesCache !== undefined) return tauriModulesCache;
+  if (!IS_TAURI) { tauriModulesCache = null; return null; }
+  try {
+    const dialog = await (Function('return import("@tauri-apps/plugin-dialog")')() as Promise<any>);
+    const fs = await (Function('return import("@tauri-apps/plugin-fs")')() as Promise<any>);
+    tauriModulesCache = { dialog, fs };
+    return tauriModulesCache;
+  } catch (e) {
+    console.warn("[Tauri] failed to load native modules, falling back to browser", e);
+    tauriModulesCache = null;
+    return null;
+  }
+}
+
+export async function exportJson(data: unknown, filename: string): Promise<boolean> {
   const json = JSON.stringify(data, null, 2);
+  const tauri = await loadTauriModules();
+  if (tauri) {
+    try {
+      const path = await tauri.dialog.save({
+        defaultPath: filename,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (path) {
+        await tauri.fs.writeTextFile(path, json);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn("[Tauri] native export failed, falling back to browser", e);
+    }
+  }
   const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
 
-export function importJson<T>(): Promise<T | null> {
+export async function importJson<T>(): Promise<T | null> {
+  const tauri = await loadTauriModules();
+  if (tauri) {
+    try {
+      const path = await tauri.dialog.open({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (typeof path === "string" && path) {
+        const text = await tauri.fs.readTextFile(path);
+        return JSON.parse(text) as T;
+      }
+      return null;
+    } catch (e) {
+      console.warn("[Tauri] native import failed, falling back to browser", e);
+    }
+  }
   return new Promise((resolve) => {
     const inp = document.createElement("input");
     inp.type = "file";

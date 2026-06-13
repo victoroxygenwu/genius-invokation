@@ -50,8 +50,10 @@ export function makeEntityState(id: number, def: EntityDefinition, variableOverr
 // ============================================================
 
 type ResolvedEntity = { def: EntityDefinition; overrides?: Record<string, number> };
+/** 解析函数签名：输入 modifier + 角色 ID + 实体查找函数，输出解析后的实体列表 */
 type EntityResolver = (mod: EnemyModifier, charId: number, lookup: (id: number) => EntityDefinition | undefined) => ResolvedEntity[];
 
+/** 工厂：创建始终返回指定状态 ID 的解析器，忽略 modifier 的 value 参数 */
 const simpleResolver = (statusId: number): EntityResolver =>
   (_mod, _charId, lookup) => {
     const def = lookup(statusId);
@@ -66,19 +68,29 @@ const usageResolver = (statusId: number): EntityResolver =>
     return def ? [{ def, overrides: { usage: count } }] : [];
   };
 
+/**
+ * Modifier 类型 → 实体解析器的映射表。
+ * 新增 modifier type 只需在此表添加一行。
+ */
 const ENTITY_RESOLVERS: Partial<Record<EnemyModifierType, EntityResolver>> = {
+  /** 免疫控制：固定状态，无需参数 */
   immuneControl: simpleResolver(KNOWN_STATUS_IDS.IMMUNE_CONTROL),
+  /** 复活：优先 PvE 专用复活状态，降级到通用复活；value 控制使用次数 */
   revive: (mod, _charId, lookup) => {
     const def = lookup(KNOWN_STATUS_IDS.PVE_FULL_REVIVE) ?? lookup(KNOWN_STATUS_IDS.REVIVE);
     const count = modNum(mod, 1);
     return def ? [{ def, overrides: { usage: count } }] : [];
   },
+  /** 减伤：value2 优先作为次数，否则用 value，默认 1 */
   damageReduction: usageResolver(KNOWN_STATUS_IDS.DAMAGE_REDUCTION),
+  /** 增伤：同减伤逻辑 */
   damageBoost: usageResolver(KNOWN_STATUS_IDS.DAMAGE_BOOST),
+  /** 固有天赋：按角色 ID 计算天赋卡 ID（200000 + charId*10 + 1），仅 equipment 类型生效 */
   innateTalent: (_mod, charId, lookup) => {
     const def = lookup(getTalentCardId(charId));
     return def && def.type === "equipment" ? [{ def }] : [];
   },
+  /** 固有圣遗物：value 指定圣遗物实体 ID，校验 equipment + artifact 标签 */
   innateArtifact: (mod, _charId, lookup) => {
     const def = lookup(modNum(mod, 0));
     return def && def.type === "equipment" && (def.tags as readonly string[]).includes("artifact") ? [{ def }] : [];
@@ -128,6 +140,9 @@ export function resolveModifier(
       if (def) effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
     }
   } else if (mod.type === "innateTalent") {
+    // innateTalent 的双路径处理：
+    // - equipment 类型 → 在上面 ENTITY_RESOLVERS 中作为状态实体挂载
+    // - 非 equipment 类型（如事件型天赋）→ 作为手牌加入
     const talentId = getTalentCardId(characterId);
     const def = lookup(talentId);
     if (def && def.type !== "equipment") {

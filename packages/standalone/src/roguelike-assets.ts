@@ -4,6 +4,7 @@
  */
 import { getCardName as getOfficialCardName, getImageUrl as getOfficialImageUrl, getEncounterName as getOfficialEncounterName, type Encounter } from "@gi-tcg/roguelike";
 import { AssetsManager } from "@gi-tcg/assets-manager";
+import { DiceType } from "@gi-tcg/typings";
 
 const ASSETS_API = "https://static-data.piovium.org/api/v4";
 
@@ -55,12 +56,12 @@ export function createRoguelikeAssetsManager(): AssetsManager {
         obtainable: false,
         hp: 30,
         maxEnergy: 2,
-        tags: ["electro", "monster", "boss"],
+        tags: ["electro", "monster"],
         skills: [
-          { id: 90021, name: ROGUELIKE_NAMES[90021], rawDescription: "造成2点物理伤害。", skillIconUrl: "", type: "normal", playCost: [["electro", 1], ["void", 2]] },
-          { id: 90022, name: ROGUELIKE_NAMES[90022], rawDescription: "对敌方前台造成2点雷元素伤害，对后台造成1点穿透伤害。", skillIconUrl: "", type: "elemental", playCost: [["electro", 3]] },
-          { id: 90023, name: ROGUELIKE_NAMES[90023], rawDescription: "对敌方前台造成3点雷元素伤害，对后台造成2点雷元素伤害。", skillIconUrl: "", type: "burst", playCost: [["electro", 4], ["energy", 2]] },
-          { id: 90024, name: ROGUELIKE_NAMES[90024], rawDescription: "战斗开始时，附带暴虐之怒状态。", skillIconUrl: "", type: "passive", playCost: [] },
+          { id: 90021, name: ROGUELIKE_NAMES[90021], rawDescription: "造成2点物理伤害。", skillIconUrl: "", type: "normal", playCost: new Map<DiceType, number>([[DiceType.Electro, 1], [DiceType.Void, 2]]) },
+          { id: 90022, name: ROGUELIKE_NAMES[90022], rawDescription: "对敌方前台造成2点雷元素伤害，对后台造成1点穿透伤害。", skillIconUrl: "", type: "elemental", playCost: new Map<DiceType, number>([[DiceType.Electro, 3]]) },
+          { id: 90023, name: ROGUELIKE_NAMES[90023], rawDescription: "对敌方前台造成3点雷元素伤害，对后台造成2点雷元素伤害。", skillIconUrl: "", type: "burst", playCost: new Map<DiceType, number>([[DiceType.Electro, 4], [DiceType.Energy, 2]]) },
+          { id: 90024, name: ROGUELIKE_NAMES[90024], rawDescription: "战斗开始时，附带暴虐之怒状态。", skillIconUrl: "", type: "passive", playCost: new Map<DiceType, number>() },
         ],
       }],
       actionCards: [
@@ -72,7 +73,7 @@ export function createRoguelikeAssetsManager(): AssetsManager {
           obtainable: false,
           type: "equipment",
           tags: ["talent"],
-          playCost: [["electro", 3]],
+          playCost: new Map<DiceType, number>([[DiceType.Electro, 3]]),
         },
         {
           id: 321020,
@@ -82,7 +83,7 @@ export function createRoguelikeAssetsManager(): AssetsManager {
           obtainable: true,
           type: "support",
           tags: ["place"],
-          playCost: [["same", 1]],
+          playCost: new Map<DiceType, number>([[DiceType.Aligned, 1]]),
         },
         {
           id: 332044,
@@ -92,12 +93,12 @@ export function createRoguelikeAssetsManager(): AssetsManager {
           obtainable: true,
           type: "eventCard",
           tags: ["action"],
-          playCost: [["same", 3]],
+          playCost: new Map<DiceType, number>([[DiceType.Aligned, 3]]),
         },
       ],
       entities: [
-        { id: 900201, name: ROGUELIKE_NAMES[900201], rawDescription: "生命值低于50%时，造成的伤害+1。", type: "characterStatus", cardFaceOrBuffIconUrl: "", skills: [] },
-        { id: 900211, name: ROGUELIKE_NAMES[900211], rawDescription: "使用技能后回复1点生命，每回合3次。", type: "characterStatus", cardFaceOrBuffIconUrl: "", skills: [] },
+        { id: 900201, name: ROGUELIKE_NAMES[900201], rawDescription: "生命值低于50%时，造成的伤害+1。", type: "status" as const, cardFaceOrBuffIconUrl: "", skills: [] },
+        { id: 900211, name: ROGUELIKE_NAMES[900211], rawDescription: "使用技能后回复1点生命，每回合3次。", type: "status" as const, cardFaceOrBuffIconUrl: "", skills: [] },
         // 301022 不在此处：它是官方实体，默认 AssetsManager 已有图片和数据
       ],
     }],

@@ -25,6 +25,7 @@ function prefillEncounters(fc: FloorConfig, pool: EnemyPool): FloorCfgEx {
     return {
       floor: fc.floor,
       path: fc.path.map((t, i) => ({ type: t, encounters: fc.encounters?.[i] ?? null })),
+      fixedEventIds: fc.fixedEventIds,
     };
   }
   // 使用与游戏相同的 generateFloorPath 生成遭遇

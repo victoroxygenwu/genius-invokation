@@ -114,13 +114,25 @@ export class CardWeightManager {
     return snapWeight(result);
   }
 
-  /** 单目标 Dijkstra：从 start 出发，找到 end 的最大乘积路径后立即返回 */
+  /**
+   * 单目标最大乘积路径（Dijkstra 变体）。
+   *
+   * 从 start 出发，寻找到达 end 的最大乘积路径。
+   * 边权为 [0,1] 范围的关联权重，路径积 = 经过所有边权的连乘。
+   * 到达目标节点后立即返回，无需遍历全图。
+   *
+   * 实现细节：
+   * - 用线性扫描代替优先队列（O(V²)，卡池规模下足够快）
+   * - queue 中可能有同一节点的多条旧路径，product < bestProduct 时跳过（惰性删除）
+   * - weight <= 0 的边在 rebuildAdjacencyMap 中已过滤，此处无需再判
+   */
   private singleTargetDijkstra(start: number, end: number): number {
     const bestProduct = new Map<number, number>();
     bestProduct.set(start, 1);
     const queue: Array<{ node: number; product: number }> = [{ node: start, product: 1 }];
 
     while (queue.length > 0) {
+      // 线性扫描取 product 最大的节点（等价于优先队列的 extract-max）
       let maxIdx = 0;
       for (let i = 1; i < queue.length; i++) {
         if (queue[i].product > queue[maxIdx].product) maxIdx = i;
@@ -129,6 +141,7 @@ export class CardWeightManager {
       queue.splice(maxIdx, 1);
 
       if (node === end) return product;
+      // 跳过已被更优路径替代的旧条目（惰性删除）
       if (product < (bestProduct.get(node) ?? 0)) continue;
 
       const neighbors = this.adjacencyMap.get(node);
@@ -222,23 +235,25 @@ export class CardWeightManager {
   }
 
   /**
-   * 计算卡池中每张卡的权重（基于当前卡组）。
-   * 使用多源扩散算法：从所有已拥有卡同时出发，沿边传播关联信号。
+   * 计算卡池中每张卡的权重乘数（基于当前卡组）。
+   * 使用多源 BFS 扩散算法：从所有已拥有卡同时出发，沿边传播关联信号。
    *
    * 算法原理：
    * 1. 将卡组中每张卡的初始信号设为 1.0
-   * 2. 每轮沿邻接表向外扩散，信号乘以 alpha 衰减
-   * 3. 多个源传播到同一节点时取最大值（不累加，避免高连接度节点权重过高）
-   * 4. 扩散 maxRounds 轮或信号低于 minContribution 时停止
+   * 2. 每轮沿邻接表向外扩散一层（BFS），信号 = 源信号 * 边权 * alpha^(轮次)
+   * 3. 同一轮内多个源传播到同一节点时信号累加（因此与多张卡组卡关联的池卡权重更高）
+   * 4. 已访问节点在轮末加入 processed 集合，后续轮次不再重复访问
+   * 5. 贡献值低于 minContribution 时剪枝，避免噪声
    *
    * 参数说明：
    * - alpha (0.5): 每跳衰减系数。1 跳后信号=0.5，2 跳后=0.25，3 跳后=0.125
    * - maxRounds (4): 最大扩散轮数。4 跳覆盖大部分关联链（天赋→角色→武器→同类型武器）
    * - minContribution (0.01): 信号阈值。低于此值的传播停止，避免噪声
    *
-   * 返回值：pool 中每张卡的权重乘数（1 + signal），范围 [1.0, 2.0]
+   * 返回值：pool 中每张卡的权重乘数（1 + signal），范围 [1.0, +∞)
    * - 1.0 = 与卡组无关
-   * - 2.0 = 卡组中直接拥有的关联卡
+   * - 1.5 ≈ 与 1 张卡组卡有 1 跳关联（0.5 * 0.5 * 1.0 = 0.25 不太精确，具体看边权）
+   * - 2.0+ = 与多张卡组卡有强关联（信号可累加超过 1.0）
    */
   computeCardWeights(pool: number[], deck: number[]): number[] {
     const deckSet = new Set(deck);

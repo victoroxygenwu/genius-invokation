@@ -1,12 +1,12 @@
 /**
- * 敌人 AI
+ * 敌人 AI 决策逻辑
  *
- * 优先级：
- *   1. 被控制 → 切人
- *   2. switchAfterSkill → 切人（放完技能后的强制切人）
- *   3. 有可打的牌 → 打牌
+ * 行动优先级（高→低）：
+ *   1. 被控制（有技能但全部不可用）→ 强制切人
+ *   2. switchAfterSkill 阶段 → 切人（放完技能后轮转到下一个角色）
+ *   3. 有可打的手牌 → 打牌
  *   4. 有可用技能 → 用最佳技能（爆发 > 元素战技 > 普攻）
- *   5. 骰子不够且没切过 → 切人
+ *   5. 无可用行动且本回合没切过人 → 切人（尝试轮转）
  *   6. 结束回合
  */
 
@@ -39,11 +39,11 @@ function buildSkillTypeMap(data: GameData): Map<number, SkillType> {
  * 创建敌人 AI（简单优先级策略）。
  *
  * 行动优先级（高→低）：
- * 1. 被控制（无可用技能）→ 强制切人
+ * 1. 被控制（有技能但全部不可用）→ 强制切人
  * 2. switchAfterSkill 阶段 → 切人（放完技能后轮转到下一个角色）
  * 3. 打出手牌（优先使用事件牌/装备牌）
  * 4. 使用技能：元素爆发 > 元素战技 > 普通攻击
- * 5. 未切过人 → 切人（轮转到下一个角色）
+ * 5. 无可用行动且本回合没切过人 → 切人（轮转到下一个角色）
  * 6. 结束回合
  *
  * 切人状态机（防止无限切人循环）：
@@ -51,8 +51,9 @@ function buildSkillTypeMap(data: GameData): Map<number, SkillType> {
  *     ↑                                                        │
  *     └──────────(下一轮回合开始时重置)──────────────────────────┘
  *
- * 切人策略：按角色 ID 排序后的轮转（round-robin），
- * 从当前活跃角色的下一个开始尝试，跳过已倒下的角色。
+ * 切人策略：按角色 ID 升序排列后轮转（round-robin），
+ * 从当前活跃角色的下一个 ID 开始尝试。通过插入点算法实现：
+ * 找最后一个 < activeCharacterId 的位置，取下一个（回绕到最小 ID）。
  */
 export function createSimpleAI(data: GameData): PlayerIO {
   const skillTypeMap = buildSkillTypeMap(data);
@@ -70,11 +71,15 @@ export function createSimpleAI(data: GameData): PlayerIO {
       }
     },
     rpc: dispatchRpc({
+      // 初始选人：取候选列表第一个（顺序由引擎决定）
       chooseActive: async (req) => ({
         activeCharacterId: req.candidateIds[0],
       }),
+      // 不重投骰子：简单 AI 不做骰子优化
       rerollDice: async () => ({ diceToReroll: [] }),
+      // 不换手牌：简单 AI 不做手牌管理
       switchHands: async () => ({ removedHandIds: [] }),
+      // 选牌阶段：取第一个候选（不做智能选择）
       selectCard: async (req) => ({
         selectedDefinitionId: req.candidateDefinitionIds[0],
       }),
@@ -119,19 +124,23 @@ export function createSimpleAI(data: GameData): PlayerIO {
           }
         }
 
+        // 被控制：存在技能（hasAnySkill）但全部不可用（!hasValidSkill）
+        // 典型情况：冰冻/石化等控制状态下技能 validity 非 VALID
         const isControlled = hasAnySkill && !hasValidSkill;
 
         const doSwitch = () => {
           if (switchTargets.length === 0) return null;
+          // 按角色 ID 升序排列可切换目标
           const sorted = switchTargets
             .map(i => ({
               idx: i,
               charId: (actions[i].action as { $case: "switchActive"; value: { characterId: number } }).value.characterId,
             }))
-            .sort((a, b) => a.charId - b.charId); // 升序：小的在前
-          // activeCharacterId 是当前活跃角色（不在 targets 中）
-          // 它在排序列表中的下一个就是轮转目标
-          // 用插入点：找最后一个 < activeCharacterId 的位置，下一个就是目标
+            .sort((a, b) => a.charId - b.charId);
+          // 轮转算法：在排序列表中找 activeCharacterId 的插入点，
+          // 取下一个位置（回绕到最小 ID），实现 round-robin 切换。
+          // 例：sorted=[101,103,105], active=103 → curIdx=1 → picked=sorted[2]=105
+          // 例：sorted=[101,103,105], active=105 → curIdx=2 → picked=sorted[0]=101（回绕）
           let curIdx = -1;
           for (let j = 0; j < sorted.length; j++) {
             if (sorted[j].charId < activeCharacterId) {
@@ -143,27 +152,32 @@ export function createSimpleAI(data: GameData): PlayerIO {
           return { chosenActionIndex: picked.idx, usedDice: actions[picked.idx].autoSelectedDice };
         };
 
+        // 优先级 1：被控制 → 强制切人（无切人目标则结束回合）
         if (isControlled) {
           const result = doSwitch();
           if (result) return result;
           if (declareEndIdx >= 0) return { chosenActionIndex: declareEndIdx, usedDice: [] };
           return { chosenActionIndex: 0, usedDice: [] };
         }
+        // 优先级 2：放完技能后的强制切人（轮转到下一个角色）
         if (phase === "switchAfterSkill") {
           const result = doSwitch();
           if (result) return result;
-          phase = "normal";
+          phase = "normal"; // 无切人目标时回退到 normal
         }
+        // 优先级 3：打出手牌（取第一个可用牌）
         if (playCards.length > 0) {
           const idx = playCards[0];
           return { chosenActionIndex: idx, usedDice: actions[idx].autoSelectedDice };
         }
+        // 优先级 4：使用技能（爆发 > 元素战技 > 普攻），用完后进入 switchAfterSkill
         const chosenSkills = [burstSkills, elementalSkills, normalSkills].find(a => a.length > 0);
         if (chosenSkills) {
           phase = "switchAfterSkill";
           const idx = chosenSkills[0];
           return { chosenActionIndex: idx, usedDice: actions[idx].autoSelectedDice };
         }
+        // 优先级 5：无可用行动且本回合没切过人 → 尝试切人
         if (phase !== "justSwitched") {
           const result = doSwitch();
           if (result) return result;

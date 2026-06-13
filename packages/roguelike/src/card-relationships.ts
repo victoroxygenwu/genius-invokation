@@ -17,6 +17,7 @@ import charactersData from "@gi-tcg/assets-manager/data/CHS/characters";
 import actionCardsData from "@gi-tcg/assets-manager/data/CHS/action_cards";
 import { getCardName } from "./utils";
 import { pairKey } from "./card-weights";
+import { ENEMY_CHARACTER_IDS } from "./data";
 
 // ============================================================
 // 卡牌关系自动分析
@@ -147,7 +148,10 @@ export class CardRelationshipAnalyzer {
   analyzeRelationships(): SuggestedPair[] {
     this.initCharacterMaps();
 
-    const cards = (actionCardsData as unknown as ActionCardRaw[]).filter(c => c.obtainable);
+    // 排除怪物天赋牌（relatedCharacterId 属于怪物角色的天赋牌）
+    const cards = (actionCardsData as unknown as ActionCardRaw[]).filter(c =>
+      c.obtainable && !(c.tags.includes("GCG_TAG_TALENT") && c.relatedCharacterId && ENEMY_CHARACTER_IDS.has(c.relatedCharacterId))
+    );
     const pairs: SuggestedPair[] = [];
     const seen = new Set<string>();
 
@@ -163,7 +167,7 @@ export class CardRelationshipAnalyzer {
     // ============================================================
 
     for (const card of cards) {
-      // 1. 天赋牌 → 绑定角色（最强关联，0.9）
+      // 1. 天赋牌 → 绑定角色（最强关联，0.9；怪物天赋牌已在 cards 过滤时排除）
       if (card.tags.includes("GCG_TAG_TALENT") && card.relatedCharacterId) {
         const charId = card.relatedCharacterId;
         if (this.charById.has(charId)) {

@@ -137,7 +137,7 @@ export interface EventDefinition {
  * - reward: 选择奖励
  * - shop: 商店界面
  * - event: 事件界面
- * - vitory: 通关
+ * - victory: 通关
  * - gameOver: 失败
  */
 export type RunState =

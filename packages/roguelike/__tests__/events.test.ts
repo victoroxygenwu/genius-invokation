@@ -8,7 +8,7 @@ import {
   getEffectDescription,
   getConditionDescription,
 } from "../src/events";
-import { FALLBACK_EVENT_ID } from "../src/data";
+import { FALLBACK_EVENT_IDS } from "../src/data";
 import type {
   EventDefinition,
   EventConditionType,
@@ -316,7 +316,7 @@ describe("getEligibleEvents", () => {
   test("excludes fallback event", () => {
     const events = [
       createEvent({
-        id: FALLBACK_EVENT_ID,
+        id: 2999,
         conditions: [],
       }),
     ];

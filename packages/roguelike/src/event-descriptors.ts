@@ -5,6 +5,7 @@ import { getCardName } from "./utils";
 // 字段描述符
 // ============================================================
 
+/** 编辑器字段描述符：定义事件条件/效果的某个参数的 UI 控件类型 */
 export type FieldDescriptor =
   | { key: string; label?: string; type: "number"; min: number; max: number }
   | { key: string; label?: string; type: "entityId"; entityKind: "card" | "character" | "enemy" }
@@ -17,6 +18,7 @@ export type FieldDescriptor =
 // 条件描述符
 // ============================================================
 
+/** 条件类型描述符：标签、字段列表、人类可读描述、默认值 */
 export interface ConditionDescriptor {
   type: string;
   label: string;
@@ -29,6 +31,7 @@ export interface ConditionDescriptor {
 // 效果描述符
 // ============================================================
 
+/** 效果类型描述符：标签、字段列表、人类可读描述、默认值 */
 export interface EffectDescriptor {
   type: string;
   label: string;
