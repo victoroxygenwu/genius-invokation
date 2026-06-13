@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
-import getData from "@gi-tcg/data";
+import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
   generateCardPool,
@@ -24,7 +24,7 @@ import { EventEditor } from "./EventEditor";
 import { OverlayPanel } from "./OverlayPanel";
 import { NumberInput } from "./NumberInput";
 
-const data = getData(CURRENT_VERSION);
+const data = getRoguelikeData(CURRENT_VERSION);
 
 /** 从敌人池构建全部遭遇列表 */
 function buildEncounters() {
@@ -46,6 +46,7 @@ export interface DebugPanelProps {
   onStartGame: () => void;
   /** 遭遇选择时的调试回调（自动胜利模式下自动结束战斗） */
   onDebugSelectEncounter?: (encounter: Encounter) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export function DebugPanel(props: DebugPanelProps) {
@@ -99,7 +100,7 @@ export function DebugPanel(props: DebugPanelProps) {
   /** 初始化测试 run，返回角色数组（失败返回 null） */
   function ensureDebugReady(currency?: number): number[] | null {
     const chars = testChars();
-    if (chars.length < 2) { alert("至少选择 2 个角色"); return null; }
+    if (chars.length < 2) { props.onShowToast?.("至少选择 2 个角色"); return null; }
     // 重建 runManager 确保使用最新的关卡配置（利息、商店卡数等）
     props.onCreateRunManager();
     ctrl().quickStart(chars, currency ?? levelConfig().initialCurrency);
@@ -114,7 +115,7 @@ export function DebugPanel(props: DebugPanelProps) {
     // 找到第一个战斗节点（normal/elite/boss）
     const battleNodeIdx = run.path.findIndex((n) => n.type === "normal" || n.type === "elite" || n.type === "boss");
     if (battleNodeIdx < 0) {
-      alert("当前关卡没有战斗节点！");
+      props.onShowToast?.("当前关卡没有战斗节点！");
       return;
     }
     ctrl().setRun({ currentNodeIndex: battleNodeIdx, state: "encounterSelect" });
@@ -147,7 +148,7 @@ export function DebugPanel(props: DebugPanelProps) {
     const encounter = buildEncounters()[0];
     ctrl().setRun({ currentEncounter: encounter, state: "battle" });
     props.runManager().onBattleEnd(0);
-    props.onSetTestBattleMode(false);
+    props.onSetTestBattleMode(true);
     props.onSetDebugMode("manual");
     props.onSetViewMode("game");
   };
@@ -202,7 +203,7 @@ export function DebugPanel(props: DebugPanelProps) {
           <button class="editor-btn editor-btn-blue" onClick={testReward}>🎁 测试奖励</button>
           <button class="editor-btn editor-btn-blue" onClick={testFullFlow}>🔄 测试流程</button>
           <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel(activePanel() === "cardPool" ? null : "cardPool")}>🃏 费用编辑</button>
-          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("enemyEditor")}>👾 怪物编辑</button>
+          <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("enemyEditor")}>👾 敌人编辑</button>
           <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("levelEditor")}>🗺️ 关卡编辑</button>
           <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("cardWeights")}>⚖️ 权重编辑</button>
           <button class="editor-btn editor-btn-blue" onClick={() => setActivePanel("eventEditor")}>📜 事件编辑</button>

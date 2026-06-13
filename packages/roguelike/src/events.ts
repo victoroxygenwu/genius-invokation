@@ -103,7 +103,13 @@ function getMatchCount(
  * 算法：根据 conditionMode 决定 AND/OR 逻辑 + 匹配数量缩放
  * - "or"（默认）：任意条件满足即为候选，满足的条件权重累加
  * - "and"：所有条件必须满足才为候选
- * - 使用 log2(matchCount + 1) 作为缩放因子，提供递减收益
+ *
+ * 匹配数量缩放公式：scale = max(1, log2(matchCount + 1))
+ * - matchCount=1 → scale=1.0（基数，无额外加成）
+ * - matchCount=2 → scale=1.58（2 张同标签卡 → 1.58 倍权重）
+ * - matchCount=3 → scale=2.0
+ * - matchCount=5 → scale=2.58
+ * 设计意图：避免"拥有 10 张料理卡"这类条件权重爆炸，递减收益确保多条件事件不会被单条件高数量淹没
  */
 export function evaluateEventWeight(
   event: EventDefinition,

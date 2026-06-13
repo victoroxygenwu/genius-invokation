@@ -5,7 +5,7 @@ import { setAsyncContext } from "@gi-tcg/core";
 import { createClient } from "@gi-tcg/web-ui-core";
 import "@gi-tcg/web-ui-core/style.css";
 import { PbPhaseType } from "@gi-tcg/typings";
-import { getEncounterName } from "@gi-tcg/roguelike";
+import { getEncounterName, getRoguelikeAssetsManager } from "../roguelike-assets";
 
 export type DebugMode = "off" | "manual" | "autoWin";
 
@@ -16,13 +16,16 @@ export interface BattleScreenProps {
   onBattleStateChange?: (inBattle: boolean) => void;
   debugMode: Accessor<DebugMode>;
   onGoHome: () => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export function BattleScreen(props: BattleScreenProps) {
   const [inBattle, setInBattle] = createSignal(false);
   const [gameEndTrigger, setGameEndTrigger] = createSignal(0);
 
-  const [uiIo, Chessboard, boardData] = createClient(0);
+  const [uiIo, Chessboard, boardData] = createClient(0, {
+    assetsManager: getRoguelikeAssetsManager,
+  });
 
   // 响应式检测游戏结束
   createEffect(on(
@@ -58,7 +61,7 @@ export function BattleScreen(props: BattleScreenProps) {
       if (!disposed) props.onBattleEnd(winner === 0 ? 0 : 1);
     } catch (e) {
       console.error("[startBattle] Battle error:", e);
-      alert(`战斗出错: ${e instanceof Error ? e.message : String(e)}`);
+      props.onShowToast?.(`战斗出错: ${e instanceof Error ? e.message : String(e)}`);
       if (!disposed) props.onBattleEnd(1);
     } finally {
       setAsyncContext(false);

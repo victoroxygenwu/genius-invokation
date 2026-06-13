@@ -1,7 +1,8 @@
 import { For, Show, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { RoguelikeRun } from "@gi-tcg/roguelike";
-import { getRefreshCost, getDeleteCost, getCardName } from "@gi-tcg/roguelike";
+import { getRefreshCost, getDeleteCost, getCardDescription } from "@gi-tcg/roguelike";
+import { getCardName } from "../roguelike-assets";
 import { SafeImage } from "../SafeImage";
 import type { DebugMode } from "./HomeScreen";
 
@@ -13,6 +14,7 @@ export interface ShopScreenProps {
   onFinishShop: () => void;
   debugMode: Accessor<DebugMode>;
   onGoHome: () => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export function ShopScreen(props: ShopScreenProps) {
@@ -23,7 +25,7 @@ export function ShopScreen(props: ShopScreenProps) {
     const r = props.run();
     const cost = getDeleteCost(r.deleteCount);
     if (r.currency < cost) {
-      alert("费用不足！");
+      props.onShowToast?.("费用不足！");
       return;
     }
     if (deletingIndex() === i) {
@@ -55,7 +57,9 @@ export function ShopScreen(props: ShopScreenProps) {
       </div>
       <div class="pve-shop-grid">
         <For each={props.run().shopItems}>
-          {(item, index) => (
+          {(item, index) => {
+            const desc = getCardDescription(item.cardId);
+            return (
             <button
               class="pve-shop-item"
               onClick={() => props.onBuyCard(index())}
@@ -64,8 +68,10 @@ export function ShopScreen(props: ShopScreenProps) {
               <SafeImage class="pve-card-img" entityId={item.cardId} alt={item.name} loading="lazy" />
               <div class="pve-item-name">{item.name}</div>
               <div class="pve-item-cost">💰 {item.cost}</div>
+              {desc && <div class="pve-card-tooltip">{desc}</div>}
             </button>
-          )}
+            );
+          }}
         </For>
       </div>
       <Show when={showDeck()}>
@@ -73,7 +79,9 @@ export function ShopScreen(props: ShopScreenProps) {
           <h3>当前卡组 ({props.run().deck.length} 张)</h3>
           <div class="pve-deck-items">
             <For each={props.run().deck}>
-              {(cardId, index) => (
+              {(cardId, index) => {
+                const desc = getCardDescription(cardId);
+                return (
                 <button
                   class={`pve-deck-item ${deletingIndex() === index() ? "pve-deck-item-deleting" : ""}`}
                   onClick={() => deleteCard(index())}
@@ -83,8 +91,10 @@ export function ShopScreen(props: ShopScreenProps) {
                   <Show when={deletingIndex() === index()}>
                     <div class="pve-deck-confirm">再点确认删除</div>
                   </Show>
+                  {desc && <div class="pve-card-tooltip">{desc}</div>}
                 </button>
-              )}
+                );
+              }}
             </For>
           </div>
           <Show when={deletingIndex() >= 0}>

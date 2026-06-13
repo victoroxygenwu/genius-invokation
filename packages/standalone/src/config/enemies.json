@@ -39,6 +39,7 @@
     { "characterId": 2305, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
     { "characterId": 2502, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
     { "characterId": 2602, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
-    { "characterId": 2702, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] }
+    { "characterId": 2702, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] },
+    { "characterId": 9002, "hpOverride": null, "currencyReward": null, "modifiers": [{ "type": "supportCard", "value": 321007 }] }
   ]
 }

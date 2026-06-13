@@ -224,14 +224,29 @@ export class CardWeightManager {
   /**
    * 计算卡池中每张卡的权重（基于当前卡组）。
    * 使用多源扩散算法：从所有已拥有卡同时出发，沿边传播关联信号。
+   *
+   * 算法原理：
+   * 1. 将卡组中每张卡的初始信号设为 1.0
+   * 2. 每轮沿邻接表向外扩散，信号乘以 alpha 衰减
+   * 3. 多个源传播到同一节点时取最大值（不累加，避免高连接度节点权重过高）
+   * 4. 扩散 maxRounds 轮或信号低于 minContribution 时停止
+   *
+   * 参数说明：
+   * - alpha (0.5): 每跳衰减系数。1 跳后信号=0.5，2 跳后=0.25，3 跳后=0.125
+   * - maxRounds (4): 最大扩散轮数。4 跳覆盖大部分关联链（天赋→角色→武器→同类型武器）
+   * - minContribution (0.01): 信号阈值。低于此值的传播停止，避免噪声
+   *
+   * 返回值：pool 中每张卡的权重乘数（1 + signal），范围 [1.0, 2.0]
+   * - 1.0 = 与卡组无关
+   * - 2.0 = 卡组中直接拥有的关联卡
    */
   computeCardWeights(pool: number[], deck: number[]): number[] {
     const deckSet = new Set(deck);
     const uniqueDeck = [...deckSet];
 
-    const alpha = 0.5;
-    const maxRounds = 4;
-    const minContribution = 0.01;
+    const alpha = 0.5;          // 每跳衰减系数
+    const maxRounds = 4;        // 最大扩散轮数
+    const minContribution = 0.01; // 信号停止阈值
 
     const signal = new Map<number, number>();
     for (const id of uniqueDeck) signal.set(id, 1);

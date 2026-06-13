@@ -288,7 +288,7 @@ export function importJson<T>(): Promise<T | null> {
         const text = await f.text();
         resolve(JSON.parse(text) as T);
       } catch {
-        alert("导入失败：JSON 格式错误");
+        console.error("导入失败：JSON 格式错误");
         resolve(null);
       }
     };

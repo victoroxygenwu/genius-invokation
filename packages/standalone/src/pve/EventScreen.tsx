@@ -1,7 +1,7 @@
 import { For, Show, createSignal } from "solid-js";
 import type { Accessor, JSX } from "solid-js";
 import type { RoguelikeRun, RoguelikeRunManager } from "@gi-tcg/roguelike";
-import { getCardName } from "@gi-tcg/roguelike";
+import { getCardName } from "../roguelike-assets";
 import { SafeImage } from "../SafeImage";
 import type { DebugMode } from "./HomeScreen";
 

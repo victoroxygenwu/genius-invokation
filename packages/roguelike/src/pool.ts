@@ -136,10 +136,11 @@ export function createEncounter(type: EncounterType, configs: EnemyConfig | Enem
 }
 
 /** 从遭遇配置中获取显示名称 */
-export function getEncounterName(encounter: Encounter): string {
+export function getEncounterName(encounter: Encounter, nameFn?: (id: number) => string): string {
   const ids = encounter.configs.filter((c) => c?.characterId > 0).map((c) => c.characterId);
   if (ids.length === 0) return "Unknown Enemy";
-  return ids.map((id) => getCardName(id)).join(" & ");
+  const fn = nameFn ?? getCardName;
+  return ids.map((id) => fn(id)).join(" & ");
 }
 
 /** 从遭遇配置中获取所有角色 ID */
@@ -167,10 +168,12 @@ export function generateFloorPath(
   enemyPool?: EnemyPool,
   fixedEventIds?: (number | null)[],
 ): PathNode[] {
+  let eventIndex = 0;
   return pathTypes.map((type, i) => {
     if (type === "shop") return { type, encounters: [], completed: false };
     if (type === "event") {
-      return { type, encounters: [], completed: false, fixedEventId: fixedEventIds?.[i] ?? undefined };
+      const fixedId = fixedEventIds?.[eventIndex++] ?? undefined;
+      return { type, encounters: [], completed: false, fixedEventId: fixedId ?? undefined };
     }
     const encType = type as EncounterType;
     const preConfigured = encounterConfigs?.[i];

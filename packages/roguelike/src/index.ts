@@ -40,7 +40,7 @@ export {
   BASE_HP,
   DEFAULT_ENEMY_MODIFIERS, TENSHUKAKU_ENTITY_ID, DEFAULT_EVENTS, FALLBACK_EVENT_ID,
   // economy
-  getEnemyHp, BOSS_PHASE_HP, ENCOUNTER_CURRENCY, getEncounterCurrency,
+  getEnemyHp, ENCOUNTER_CURRENCY, getEncounterCurrency,
   getRefreshCost, getDeleteCost, getInterest, SHOP_CARD_PRICE_MIN, SHOP_CARD_PRICE_MAX,
   // enemies
   ALL_NORMAL_ENEMIES, ALL_ELITE_ENEMIES, ALL_BOSS_ENEMIES, DEFAULT_ENEMY_POOL,
@@ -57,7 +57,7 @@ export {
 export type { EnemyPool, CardEntry } from "./pool";
 export { generateCardPool, rollCards, rollShopCards, validateCardIds, DEFAULT_SHOP_CARD_COST } from "./card-pool";
 export type { RollCardsOptions } from "./card-pool";
-export { getImageUrl, FALLBACK_IMAGE, getCardName, sample, validateIds } from "./utils";
+export { getImageUrl, FALLBACK_IMAGE, getCardName, getCardDescription, sample, validateIds } from "./utils";
 export { RoguelikeRunManager } from "./run";
 export type { SimpleStorage } from "./run";
 export { resolveModifier, resolveModifiers, makeEntityState } from "./modifier-resolver";

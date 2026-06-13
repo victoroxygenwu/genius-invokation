@@ -1,36 +1,38 @@
 import { For, Show, createSignal, createMemo } from "solid-js";
-import getData from "@gi-tcg/data";
+import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
-  ENCOUNTER_CURRENCY, BASE_HP, TENSHUKAKU_ENTITY_ID, getCardName,
-  querySupportCards, queryArtifactCards,
+  ENCOUNTER_CURRENCY, BASE_HP, TENSHUKAKU_ENTITY_ID,
+  querySupportCards, queryArtifactCards, queryFoodCards,
   type EnemyConfig, type EnemyModifier, type EnemyModifierType, type CardEntry,
 } from "@gi-tcg/roguelike";
+import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
 import { EditorToolbar } from "./EditorToolbar";
 import { OverlayPanel } from "./OverlayPanel";
 import { SafeImage } from "./SafeImage";
 import { NumberInput } from "./NumberInput";
 import { useEditableList } from "./useEditableList";
+import { CardImageSelect } from "./CardImageSelect";
 
-const data = getData(CURRENT_VERSION);
+const data = getRoguelikeData(CURRENT_VERSION);
 
 type Tab = "normal" | "elite" | "boss";
 
 const MODIFIER_LABELS: Record<EnemyModifierType, string> = {
   immuneControl: "免疫控制",
   revive: "多命复活",
-  damageReduction: "受伤减免（量×次数）",
-  damageBoost: "伤害增加（量×次数）",
+  damageReduction: "受伤减免",
+  damageBoost: "伤害增加",
   innateTalent: "开局天赋",
   fullEnergy: "开局满能量",
   supportCard: "开局支援牌",
-  autoDish: "料理效果",
+  autoDish: "每回合料理牌",
   innateArtifact: "开局圣遗物",
 };
 
 /** 修饰器是否需要额外值输入 */
-const MODIFIER_VALUE_TYPE: Record<EnemyModifierType, "none" | "number" | "string" | "support" | "artifact"> = {
+const MODIFIER_VALUE_TYPE: Record<EnemyModifierType, "none" | "number" | "string" | "support" | "artifact" | "food"> = {
   immuneControl: "none",
   revive: "number",
   damageReduction: "number",
@@ -38,13 +40,14 @@ const MODIFIER_VALUE_TYPE: Record<EnemyModifierType, "none" | "number" | "string
   innateTalent: "none",   // 自动从 characterId 推断
   fullEnergy: "none",
   supportCard: "support",
-  autoDish: "number",
+  autoDish: "food",
   innateArtifact: "artifact",
 };
 
 // 从 GameData 动态查询卡牌列表（模块级缓存，只计算一次）
-const SUPPORT_BY_GROUP = querySupportCards(data);
+const SUPPORT_CARDS_FLAT: CardEntry[] = Object.values(querySupportCards(data)).flat();
 const ARTIFACT_CARDS = queryArtifactCards(data);
+const FOOD_CARDS = queryFoodCards(data);
 
 /** 获取 modifier 的当前 value（无 value 的类型返回 undefined） */
 function getModValue(mod: EnemyModifier): number | undefined {
@@ -62,7 +65,7 @@ function ModifierRow(p: { mod: EnemyModifier; i: number; onUpdate: (i: number, m
       </select>
       {/* 数字输入 */}
       <Show when={valueType() === "number"}>
-        <span class="ee-mod-label">{p.mod.type === "damageReduction" || p.mod.type === "damageBoost" ? "每次" : ""}</span>
+        <span class="ee-mod-label">{p.mod.type === "damageReduction" || p.mod.type === "damageBoost" ? "次数" : ""}</span>
         <NumberInput
           value={typeof val() === "number" ? val() as number : 1}
           min={1}
@@ -70,29 +73,30 @@ function ModifierRow(p: { mod: EnemyModifier; i: number; onUpdate: (i: number, m
           onChange={(v) => p.onUpdate(p.i, { ...p.mod, value: v } as EnemyModifier)}
         />
       </Show>
-      {/* 伤害减免/增加的触发次数 */}
-      <Show when={p.mod.type === "damageReduction" || p.mod.type === "damageBoost"}>
-        <span class="ee-mod-label">×次数</span>
-        <NumberInput
-          value={("value2" in p.mod && typeof p.mod.value2 === "number") ? p.mod.value2 : 1}
-          min={1}
-          max={99}
-          onChange={(v) => p.onUpdate(p.i, { ...p.mod, value2: v } as EnemyModifier)}
-        />
-      </Show>
       {/* 支援牌选择 */}
       <Show when={valueType() === "support"}>
-        <select class="input-field ee-modifier-select" value={typeof val() === "number" ? val() as number : TENSHUKAKU_ENTITY_ID} onChange={(e) => p.onUpdate(p.i, { ...p.mod, value: parseInt(e.target.value) } as EnemyModifier)}>
-          <For each={Object.entries(SUPPORT_BY_GROUP)}>{([group, cards]) => (
-            <optgroup label={group}><For each={cards}>{(c) => <option value={c.id}>{c.name}</option>}</For></optgroup>
-          )}</For>
-        </select>
+        <CardImageSelect
+          value={typeof val() === "number" ? val() as number : TENSHUKAKU_ENTITY_ID}
+          items={SUPPORT_CARDS_FLAT}
+          onChange={(id) => p.onUpdate(p.i, { ...p.mod, value: id } as EnemyModifier)}
+        />
       </Show>
       {/* 圣遗物选择 */}
       <Show when={valueType() === "artifact"}>
-        <select class="input-field ee-modifier-select" value={typeof val() === "number" ? val() as number : 312101} onChange={(e) => p.onUpdate(p.i, { ...p.mod, value: parseInt(e.target.value) } as EnemyModifier)}>
-          <For each={ARTIFACT_CARDS}>{(c) => <option value={c.id}>{c.name}</option>}</For>
-        </select>
+        <CardImageSelect
+          value={typeof val() === "number" ? val() as number : 312101}
+          items={ARTIFACT_CARDS}
+          onChange={(id) => p.onUpdate(p.i, { ...p.mod, value: id } as EnemyModifier)}
+        />
+      </Show>
+      {/* 料理牌选择（含随机选项） */}
+      <Show when={valueType() === "food"}>
+        <CardImageSelect
+          value={typeof val() === "number" ? val() as number : 0}
+          items={FOOD_CARDS}
+          specialOptions={[{ value: 0, label: "🎲 随机料理" }]}
+          onChange={(id) => p.onUpdate(p.i, { ...p.mod, value: id } as EnemyModifier)}
+        />
       </Show>
       <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => p.onRemove(p.i)}>✕</button>
     </div>
@@ -172,6 +176,7 @@ export function EnemyEditor(p: EnemyEditorProps) {
   );
 
   const doSave = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     configStore.setEnemyPool(pools());
     p.onSave();
     p.onClose();
@@ -184,7 +189,7 @@ export function EnemyEditor(p: EnemyEditorProps) {
   ];
 
   return (
-    <OverlayPanel title="👾 怪物编辑" onClose={p.onClose}
+    <OverlayPanel title="👾 敌人编辑" onClose={p.onClose}
       titleActions={
         <EditorToolbar
           filename="enemy-config.json"
@@ -230,7 +235,7 @@ function EnemySubEditor(p: { config: EnemyConfig; label: string; onSave: (c: Ene
   });
 
   return (
-    <OverlayPanel title={`👾 编辑怪物 [${p.label}]`} onClose={p.onClose} maxWidth="500px" zIndex={1100}
+    <OverlayPanel title={`👾 编辑敌人 [${p.label}]`} onClose={p.onClose} maxWidth="500px" zIndex={1100}
       titleActions={
         <button class="editor-btn editor-btn-save" onClick={() => { p.onSave(config()); p.onClose(); }}>保存</button>
       }

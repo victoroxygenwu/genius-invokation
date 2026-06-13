@@ -15,12 +15,12 @@
 
 import { For, Show, createMemo, createSignal } from "solid-js";
 import {
-  getCardName,
   snapWeight,
   pairKey,
   CardWeightManager,
   type SuggestedPair,
 } from "@gi-tcg/roguelike";
+import { getCardName } from "./roguelike-assets";
 import {
   configStore,
   exportJson, importJson,

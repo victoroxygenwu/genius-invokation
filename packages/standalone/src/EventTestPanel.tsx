@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createMemo } from "solid-js";
-import getData from "@gi-tcg/data";
+import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
   DEFAULT_EVENTS,
@@ -11,7 +11,7 @@ import { configStore } from "./configStore";
 import { DebugRunController } from "./debug-run-controller";
 import { OverlayPanel } from "./OverlayPanel";
 
-const data = getData(CURRENT_VERSION);
+const data = getRoguelikeData(CURRENT_VERSION);
 
 export interface EventTestPanelProps {
   runManager: () => RoguelikeRunManager;

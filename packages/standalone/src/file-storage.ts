@@ -340,6 +340,16 @@ export class SimpleStorageAdapter implements SimpleStorage {
   async setItem(key: string, value: string): Promise<void> {
     this.cache.set(key, value);
     await this.initPromise;
+    this.writeToIDB(key, value);
+  }
+
+  /** 同步写入 IDB（跳过 initPromise 等待，用于 beforeunload） */
+  writeSync(key: string, value: string): void {
+    this.cache.set(key, value);
+    this.writeToIDB(key, value);
+  }
+
+  private writeToIDB(key: string, value: string): void {
     if (!this.db) return;
     try {
       const tx = this.db.transaction(this.storeName, "readwrite");

@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { RoguelikeRun } from "@gi-tcg/roguelike";
+import { getCardDescription } from "@gi-tcg/roguelike";
 import { SafeImage } from "../SafeImage";
 import type { DebugMode } from "./HomeScreen";
 
@@ -14,6 +15,16 @@ export interface RewardScreenProps {
 
 export function RewardScreen(props: RewardScreenProps) {
   const [selectedReward, setSelectedReward] = createSignal(-1);
+  const isTest = () => props.debugMode() !== "off";
+
+  const selectCard = (index: number) => {
+    if (isTest()) {
+      // 测试模式：点击直接领取
+      props.onClaimReward(index);
+    } else {
+      setSelectedReward(index);
+    }
+  };
 
   return (
     <div class="pve-reward">
@@ -26,20 +37,26 @@ export function RewardScreen(props: RewardScreenProps) {
       </Show>
       <div class="pve-rewards-row">
         <For each={props.run().rewardItems}>
-          {(reward, index) => (
+          {(reward, index) => {
+            const desc = getCardDescription(reward.cardId);
+            return (
             <button
-              class={`pve-reward-card ${selectedReward() === index() ? "selected" : ""}`}
-              onClick={() => setSelectedReward(index())}
+              class={`pve-reward-card ${!isTest() && selectedReward() === index() ? "selected" : ""}`}
+              onClick={() => selectCard(index())}
             >
               <SafeImage class="pve-card-img" entityId={reward.cardId} alt={reward.name} loading="lazy" />
               <div class="pve-reward-name">{reward.name}</div>
+              {desc && <div class="pve-card-tooltip">{desc}</div>}
             </button>
-          )}
+            );
+          }}
         </For>
       </div>
       <div class="pve-actions">
-        <button disabled={selectedReward() < 0} onClick={() => props.onClaimReward(selectedReward())}>确认选择</button>
-        <Show when={props.debugMode() !== "off"}>
+        <Show when={!isTest()}>
+          <button disabled={selectedReward() < 0} onClick={() => props.onClaimReward(selectedReward())}>确认选择</button>
+        </Show>
+        <Show when={isTest()}>
           <button onClick={props.onTestRewardRefresh}>🔄 刷新奖励</button>
           <button onClick={props.onGoHome}>返回首页</button>
         </Show>

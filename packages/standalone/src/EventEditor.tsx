@@ -1,66 +1,21 @@
-import { For, Show, createSignal, createMemo } from "solid-js";
-import getData from "@gi-tcg/data";
+import { For, Show, createSignal } from "solid-js";
+import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
-  getCardName, DEFAULT_EVENTS, generateCharacterPool, CARD_TAG_LABELS,
+  DEFAULT_EVENTS, generateCharacterPool, CARD_TAG_LABELS,
   CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS,
   type EventDefinition, type EventCondition, type EventConditionType,
   type EventEffectType, type CardEntry, type FieldDescriptor,
 } from "@gi-tcg/roguelike";
+import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
 import { OverlayPanel } from "./OverlayPanel";
-import { EntityGrid } from "./EntityGrid";
 import { EditorToolbar } from "./EditorToolbar";
-import { SafeImage } from "./SafeImage";
 import { NumberInput } from "./NumberInput";
 import { useEditableList } from "./useEditableList";
+import { CardImageSelect } from "./CardImageSelect";
 
-const data = getData(CURRENT_VERSION);
-
-// ============================================================
-// ID 选择器（卡牌/角色）
-// ============================================================
-
-/** 通用 ID 选择器：显示当前选择（图片+名称），点击弹出可搜索列表 */
-function IdPicker(p: {
-  value: number;
-  items: CardEntry[];
-  onChange: (id: number) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = createSignal(false);
-  const current = () => p.items.find((it) => it.id === p.value);
-
-  return (
-    <>
-      <button class="ee-picker-btn" onClick={() => setOpen(true)}>
-        <Show when={current()} fallback={<span>{p.placeholder ?? "选择..."}</span>}>
-          <SafeImage entityId={p.value} style={{ width: "20px", height: "20px", "border-radius": "3px", "object-fit": "cover", "object-position": "top center" }} />
-          <span>{current()!.name}</span>
-        </Show>
-      </button>
-      <Show when={open()}>
-        <div class="ee-picker-overlay" onClick={() => setOpen(false)}>
-          <div class="ee-picker-modal" onClick={(e) => e.stopPropagation()}>
-            <div class="ee-picker-header">
-              <button class="editor-btn" onClick={() => setOpen(false)}>关闭</button>
-            </div>
-            <EntityGrid
-              items={p.items}
-              mode="single"
-              selected={p.value}
-              searchable
-              searchPlaceholder="搜索名称或ID..."
-              maxItems={200}
-              onChange={(id) => { p.onChange(id); setOpen(false); }}
-              class="ee-picker-list"
-            />
-          </div>
-        </div>
-      </Show>
-    </>
-  );
-}
+const data = getRoguelikeData(CURRENT_VERSION);
 
 /** 生成完整卡牌列表（含天赋牌、共鸣牌，用于事件编辑选择器） */
 function getCardItems(): CardEntry[] {
@@ -123,7 +78,7 @@ function FieldRenderer(p: {
 
       {/* entityId */}
       <Show when={p.field.type === "entityId"}>
-        <IdPicker value={(p.value as number) ?? 0}
+        <CardImageSelect value={(p.value as number) ?? 0}
           items={getItems((p.field as any).entityKind)}
           onChange={p.onChange} placeholder="选择..." />
       </Show>
@@ -432,6 +387,7 @@ export function EventEditor(p: EventEditorProps) {
   );
 
   const doSave = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     configStore.setEvents(events());
     p.onSave();
     p.onClose();

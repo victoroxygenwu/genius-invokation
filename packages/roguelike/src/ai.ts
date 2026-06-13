@@ -35,11 +35,31 @@ function buildSkillTypeMap(data: GameData): Map<number, SkillType> {
   return map;
 }
 
+/**
+ * 创建敌人 AI（简单优先级策略）。
+ *
+ * 行动优先级（高→低）：
+ * 1. 被控制（无可用技能）→ 强制切人
+ * 2. switchAfterSkill 阶段 → 切人（放完技能后轮转到下一个角色）
+ * 3. 打出手牌（优先使用事件牌/装备牌）
+ * 4. 使用技能：元素爆发 > 元素战技 > 普通攻击
+ * 5. 未切过人 → 切人（轮转到下一个角色）
+ * 6. 结束回合
+ *
+ * 切人状态机（防止无限切人循环）：
+ *   normal ──(使用技能后)──→ switchAfterSkill ──(切人后)──→ justSwitched
+ *     ↑                                                        │
+ *     └──────────(下一轮回合开始时重置)──────────────────────────┘
+ *
+ * 切人策略：按角色 ID 排序后的轮转（round-robin），
+ * 从当前活跃角色的下一个开始尝试，跳过已倒下的角色。
+ */
 export function createSimpleAI(data: GameData): PlayerIO {
   const skillTypeMap = buildSkillTypeMap(data);
 
-  let switchAfterSkill = false;
-  let justSwitched = false;
+  // 切人状态机：normal → switchAfterSkill（放完技能后强制切人） → justSwitched（切过人，不再切）
+  type SwitchPhase = "normal" | "switchAfterSkill" | "justSwitched";
+  let phase: SwitchPhase = "normal";
   let activeCharacterId = -1;
 
   return {
@@ -75,31 +95,27 @@ export function createSimpleAI(data: GameData): PlayerIO {
 
         for (let i = 0; i < actions.length; i++) {
           const a = actions[i];
-          if (a.action?.$case === "declareEnd") {
-            declareEndIdx = i;
-            continue;
-          }
-          if (a.action?.$case === "switchActive") {
-            if (a.validity === ActionValidity.VALID) {
-              switchTargets.push(i);
-            }
-            continue;
-          }
-          if (a.action?.$case === "useSkill") {
-            hasAnySkill = true;
-            if (a.validity === ActionValidity.VALID) {
-              hasValidSkill = true;
-              const sid = getSkillId(a);
-              const st = sid != null ? skillTypeMap.get(sid) : undefined;
-              if (st === "burst") burstSkills.push(i);
-              else if (st === "elemental") elementalSkills.push(i);
-              else normalSkills.push(i);
-            }
-            continue;
-          }
-          if (a.action?.$case === "playCard") {
-            if (a.validity === ActionValidity.VALID) playCards.push(i);
-            continue;
+          switch (a.action?.$case) {
+            case "declareEnd":
+              declareEndIdx = i;
+              break;
+            case "switchActive":
+              if (a.validity === ActionValidity.VALID) switchTargets.push(i);
+              break;
+            case "useSkill":
+              hasAnySkill = true;
+              if (a.validity === ActionValidity.VALID) {
+                hasValidSkill = true;
+                const sid = getSkillId(a);
+                const st = sid != null ? skillTypeMap.get(sid) : undefined;
+                if (st === "burst") burstSkills.push(i);
+                else if (st === "elemental") elementalSkills.push(i);
+                else normalSkills.push(i);
+              }
+              break;
+            case "playCard":
+              if (a.validity === ActionValidity.VALID) playCards.push(i);
+              break;
           }
         }
 
@@ -123,8 +139,7 @@ export function createSimpleAI(data: GameData): PlayerIO {
             }
           }
           const picked = sorted[(curIdx + 1) % sorted.length];
-          switchAfterSkill = false;
-          justSwitched = true;
+          phase = "justSwitched";
           return { chosenActionIndex: picked.idx, usedDice: actions[picked.idx].autoSelectedDice };
         };
 
@@ -134,10 +149,10 @@ export function createSimpleAI(data: GameData): PlayerIO {
           if (declareEndIdx >= 0) return { chosenActionIndex: declareEndIdx, usedDice: [] };
           return { chosenActionIndex: 0, usedDice: [] };
         }
-        if (switchAfterSkill) {
+        if (phase === "switchAfterSkill") {
           const result = doSwitch();
           if (result) return result;
-          switchAfterSkill = false;
+          phase = "normal";
         }
         if (playCards.length > 0) {
           const idx = playCards[0];
@@ -145,12 +160,11 @@ export function createSimpleAI(data: GameData): PlayerIO {
         }
         const chosenSkills = [burstSkills, elementalSkills, normalSkills].find(a => a.length > 0);
         if (chosenSkills) {
-          justSwitched = false;
-          switchAfterSkill = true;
+          phase = "switchAfterSkill";
           const idx = chosenSkills[0];
           return { chosenActionIndex: idx, usedDice: actions[idx].autoSelectedDice };
         }
-        if (!justSwitched) {
+        if (phase !== "justSwitched") {
           const result = doSwitch();
           if (result) return result;
         }

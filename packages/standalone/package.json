@@ -9,7 +9,8 @@
     "dev:roguelike": "vite --config vite.roguelike.config.ts",
     "build": "vite build",
     "build:roguelike": "vite build --config vite.roguelike.config.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "bundle:images": "gnx scripts/bundle-images.ts"
   },
   "browserslist": "defaults",
   "dependencies": {
@@ -20,6 +21,7 @@
     "@gi-tcg/deck-builder": "workspace:*",
     "@gi-tcg/detail-log-viewer": "workspace:*",
     "@gi-tcg/roguelike": "workspace:*",
+    "@gi-tcg/roguelike-data": "workspace:*",
     "@gi-tcg/state-editor": "workspace:*",
     "@gi-tcg/utils": "workspace:*",
     "@gi-tcg/web-ui-core": "workspace:*",
@@ -34,6 +36,7 @@
     "@gi-tcg/config": "workspace:*",
     "@rollup/plugin-babel": "^6.0.4",
     "@types/core-js": "^2.5.8",
+    "sharp": "^0.33.0",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:",
     "vite-plugin-static-copy": "^3.1.1"

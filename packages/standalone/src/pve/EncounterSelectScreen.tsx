@@ -3,10 +3,9 @@ import type { Accessor } from "solid-js";
 import type { RoguelikeRun, RoguelikeRunManager, Encounter } from "@gi-tcg/roguelike";
 import {
   getEncounterCurrency,
-  getCardName,
-  getEncounterName,
   getEncounterCharacterIds,
 } from "@gi-tcg/roguelike";
+import { getCardName, getEncounterName } from "../roguelike-assets";
 import { SafeImage } from "../SafeImage";
 import { NODE_INFO } from "../nodeInfo";
 

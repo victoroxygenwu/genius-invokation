@@ -155,6 +155,7 @@ export const KNOWN_STATUS_IDS = {
   IMMUNE_CONTROL: 100,
   /** 复活至 1 HP — 雷晶核心（通用，无角色限制） */
   REVIVE: 124014,
+  PVE_FULL_REVIVE: 9000001,
   /** 通用伤害增加 — 造成伤害 +1（每个可用次数） */
   DAMAGE_BOOST: 210,
   /** 通用伤害减免 — 受到伤害 -1（每个可用次数） */
@@ -190,6 +191,8 @@ const ENEMY_DEFS: [number, EncounterType][] = [
   // Boss
   [2102, "boss"], [2204, "boss"], [2305, "boss"], [2502, "boss"],
   [2602, "boss"], [2702, "boss"],
+  // Roguelike 专属 Boss
+  [9002, "boss"],  // 极恶骑·苏尔特洛奇
 ];
 
 function makeConfig(characterId: number): EnemyConfig {
@@ -226,8 +229,6 @@ export function getEnemyHp(floor: number, type: "normal" | "elite" | "boss"): nu
   const multiplier = FLOOR_HP_MULTIPLIER[floor - 1] ?? 1.0;
   return Math.max(1, Math.round(base * multiplier));
 }
-
-export const BOSS_PHASE_HP = 15;
 
 /** 获取遭遇的货币奖励（configs 中第一个有效覆盖 > 类型默认值） */
 export function getEncounterCurrency(encounter: { configs: { currencyReward: number | null }[]; type: EncounterType }): number {

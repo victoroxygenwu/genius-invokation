@@ -826,26 +826,43 @@ type ShortcutMetaOf<Builder> = {
   [K in keyof SkillBuilderMetaBase]: ExtractBM<Builder>[K];
 } & { readonly: false; shortcutReceiver: BuilderWithShortcut<Builder> };
 
+/** 标记惰性参数的 Symbol，配合 `lazy()` 使用 */
+const LAZY = Symbol("gi_tcg_lazy");
+
+/**
+ * 标记一个函数为惰性参数，在 shorthand 调用时以 SkillContext 求值。
+ * 例：`.increaseDamage(lazy((c) => c.getVariable("amount")))`
+ */
+export function lazy<T>(fn: (c: any) => T): (c: any) => T {
+  return Object.assign(fn, { [LAZY]: true });
+}
+
 /**
  * 为 Builder 添加直达 SkillContext 的函数，即可
  * `.do((c) => c.PROP(ARGS))`
  * 直接简写为
  * `.PROP(ARGS)`
+ *
+ * 支持 `lazy()` 标记的惰性参数。
  */
 export function withShortcut<T extends object>(
   original: T,
 ): BuilderWithShortcut<T> {
+  const hasLazy = (args: any[]) =>
+    args.some((a) => typeof a === "function" && (a as any)[LAZY]);
+  const resolveArgs = (args: any[], c: any) =>
+    hasLazy(args) ? args.map((a) => (typeof a === "function" && (a as any)[LAZY] ? a(c) : a)) : args;
   const proxy = new Proxy(original, {
     get(target, prop, receiver) {
       if (prop in target) {
         return Reflect.get(target, prop, receiver);
       } else if (prop in SkillContext.prototype) {
         return function (this: any, ...args: any[]) {
-          return this.do((c: any) => c[prop](...args));
+          return this.do((c: any) => c[prop](...resolveArgs(args, c)));
         };
       } else {
         return function (this: any, ...args: any[]) {
-          return this.do((c: any) => c.eventArg[prop](...args));
+          return this.do((c: any) => c.eventArg[prop](...resolveArgs(args, c)));
         };
       }
     },

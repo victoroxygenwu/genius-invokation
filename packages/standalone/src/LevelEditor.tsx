@@ -1,8 +1,9 @@
 import { For, Show, createSignal } from "solid-js";
 import {
-  getCardName, generateFloorPath, sample,
+  generateFloorPath, sample,
   type RoguelikeConfig, type FloorConfig, type NodeType, type EnemyConfig, type EventDefinition, type EnemyPool,
 } from "@gi-tcg/roguelike";
+import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
 import { NODE_INFO } from "./nodeInfo";
 import { EnemyEditor } from "./EnemyEditor";
@@ -11,7 +12,7 @@ import { OverlayPanel } from "./OverlayPanel";
 import { EntityGrid } from "./EntityGrid";
 import { EditorToolbar } from "./EditorToolbar";
 import { SafeImage } from "./SafeImage";
-import { NumberInput } from "./NumberInput";
+import { NumberInput, type NumberInputHandle } from "./NumberInput";
 
 interface PathNodeCfg { type: NodeType; encounters: EnemyConfig[][] | null; }
 interface FloorCfgEx { floor: number; path: PathNodeCfg[]; fixedEventIds?: (number | null)[]; }
@@ -104,7 +105,7 @@ function EncounterEditor(p: {
               <Show when={cfg.modifiers.length > 0 || cfg.hpOverride !== null}>
                 <span class="le-encounter-mod-badge">✨{cfg.modifiers.length}</span>
               </Show>
-              <button class="editor-btn-icon editor-btn-icon-blue" title="编辑怪物" onClick={() => p.onEditEnemy(i())}>✏️</button>
+              <button class="editor-btn-icon editor-btn-icon-blue" title="编辑敌人" onClick={() => p.onEditEnemy(i())}>✏️</button>
               <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => removeEnemy(i())}>✕</button>
             </div>
           </Show>
@@ -260,6 +261,8 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
   const [rewardCardCount, setRewardCardCount] = createSignal(cfg.rewardCardCount);
   const [interestThreshold, setInterestThreshold] = createSignal(cfg.interestThreshold);
   const [interestRate, setInterestRate] = createSignal(cfg.interestRate);
+  // NumberInput commit handles（保存时主动提交未 blur 的值）
+  const globalInputRefs: Record<string, NumberInputHandle> = {};
 
   // 子编辑器状态：从 LevelEditor 打开 EnemyEditor 编辑特定怪物
   const [editingEnemy, setEditingEnemy] = createSignal<{
@@ -288,7 +291,13 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
     events: configStore.events(),
   });
 
-  const doSave = () => { configStore.setLevelConfig(buildConfig()); p.onSave(); p.onClose(); };
+  const doSave = () => {
+    // 主动提交所有 NumberInput 的未 blur 值
+    for (const ref of Object.values(globalInputRefs)) ref.commit();
+    configStore.setLevelConfig(buildConfig());
+    p.onSave();
+    p.onClose();
+  };
 
   /** 打开子编辑器编辑特定怪物 */
   const openEnemyEditor = (floorIdx: number, nodeIdx: number, encIdx: number, enemyIdx: number) => {
@@ -393,22 +402,22 @@ export function LevelEditor(p: { onSave: () => void; onClose: () => void }) {
           <div class="le-section">
             <h3>全局参数</h3>
             <div class="le-global-fields">
-              <label class="le-field"><span>初始货币</span><NumberInput value={initialCurrency()} min={0} onChange={setInitialCurrency} /></label>
-              <label class="le-field"><span>商店卡数</span><NumberInput value={shopCardCount()} min={1} max={20} onChange={setShopCardCount} /></label>
-              <label class="le-field"><span>奖励卡数</span><NumberInput value={rewardCardCount()} min={1} max={10} onChange={setRewardCardCount} /></label>
-              <label class="le-field"><span>利息阈值</span><NumberInput value={interestThreshold()} min={0} onChange={setInterestThreshold} /></label>
-              <label class="le-field"><span>每利息货币</span><NumberInput value={interestRate()} min={1} onChange={setInterestRate} /></label>
+              <label class="le-field"><span>初始货币</span><NumberInput value={initialCurrency()} min={0} onChange={setInitialCurrency} ref={(h) => globalInputRefs["initialCurrency"] = h} /></label>
+              <label class="le-field"><span>商店卡数</span><NumberInput value={shopCardCount()} min={1} max={20} onChange={setShopCardCount} ref={(h) => globalInputRefs["shopCardCount"] = h} /></label>
+              <label class="le-field"><span>奖励卡数</span><NumberInput value={rewardCardCount()} min={1} max={10} onChange={setRewardCardCount} ref={(h) => globalInputRefs["rewardCardCount"] = h} /></label>
+              <label class="le-field"><span>利息阈值</span><NumberInput value={interestThreshold()} min={0} onChange={setInterestThreshold} ref={(h) => globalInputRefs["interestThreshold"] = h} /></label>
+              <label class="le-field"><span>每利息货币</span><NumberInput value={interestRate()} min={1} onChange={setInterestRate} ref={(h) => globalInputRefs["interestRate"] = h} /></label>
             </div>
           </div>
           <div class="le-section">
             <h3>关卡路径</h3>
-            <p class="le-hint">每层可配置节点序列和敌人组合。满 4 人后自动跳过选人。点击 ✏️ 编辑怪物的特殊效果。</p>
+            <p class="le-hint">每层可配置节点序列和敌人组合。满 4 人后自动跳过选人。点击 ✏️ 编辑敌人的特殊效果。</p>
             <div class="le-floors">
               <For each={floors()}>{(fc, i) => (
                 <FloorRow cfg={fc} floorIndex={i()}
                   onUpdate={(c) => updateFloor(i(), c)}
                   onRemove={() => removeFloor(i())}
-                  canRemove={floors().length > 1}
+                  canRemove={i() > 0 && floors().length > 1}
                   onEditEnemy={openEnemyEditor}
                   onEditEvent={openEventEditor}
                 />

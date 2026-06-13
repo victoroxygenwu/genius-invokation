@@ -25,7 +25,7 @@ export type EnemyModifierType =
   | "innateTalent"         // 开局拥有自身的天赋
   | "fullEnergy"           // 开局满能量
   | "supportCard"          // 开局支援牌（场地/伙伴/道具/元素助佑）
-  | "autoDish"             // 每回合自动生成料理
+  | "autoDish"             // 每回合料理牌（value: 0=随机料理状态, >0=指定食物卡ID）
   | "innateArtifact";      // 开局圣遗物
 
 /** 无参数的修饰器类型 */
@@ -33,6 +33,7 @@ type ModifierWithoutValue = "immuneControl" | "innateTalent" | "fullEnergy";
 /** 数值参数的修饰器类型 */
 type ModifierWithNumber = "revive" | "damageReduction" | "damageBoost" | "supportCard" | "autoDish" | "innateArtifact";
 
+/** 敌人修饰器实例（无参数或带数值参数） */
 export type EnemyModifier =
   | { type: ModifierWithoutValue }
   | { type: ModifierWithNumber; value: number; value2?: number };
@@ -49,6 +50,7 @@ export interface EnemyConfig {
   locked?: boolean;
 }
 
+/** 遭遇难度等级 */
 export type EncounterType = "normal" | "elite" | "boss";
 
 export interface Encounter {
@@ -57,6 +59,7 @@ export interface Encounter {
   configs: EnemyConfig[];
 }
 
+/** 战斗奖励卡牌 */
 export interface Reward {
   cardId: number;
   name: string;
@@ -125,6 +128,18 @@ export interface EventDefinition {
 
 // ============================================================
 
+/**
+ * 运行状态机状态
+ * - characterSelect: 开局选择初始角色
+ * - addCharacter: 追加角色（每层开始时）
+ * - encounterSelect: 选择遭遇
+ * - battle: 战斗中
+ * - reward: 选择奖励
+ * - shop: 商店界面
+ * - event: 事件界面
+ * - vitory: 通关
+ * - gameOver: 失败
+ */
 export type RunState =
   | "characterSelect"
   | "addCharacter"
@@ -136,8 +151,10 @@ export type RunState =
   | "victory"
   | "gameOver";
 
+/** 路径节点类型 */
 export type NodeType = "normal" | "elite" | "shop" | "boss" | "event";
 
+/** 路径节点（对应地图上的一个格子） */
 export interface PathNode {
   type: NodeType;
   encounters: Encounter[];
@@ -146,12 +163,14 @@ export interface PathNode {
   fixedEventId?: number;
 }
 
+/** 商店物品 */
 export interface ShopItem {
   cardId: number;
   name: string;
   cost: number;
 }
 
+/** 角色池条目（用于角色选择界面） */
 export interface CharacterPoolEntry {
   id: number;
   name: string;

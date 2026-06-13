@@ -15,6 +15,7 @@
 
 import { type JSX } from "solid-js";
 import { exportJson, importJson } from "./configStore";
+import { createConfirm } from "./ConfirmModal";
 
 // ============================================================
 // 统一编辑器工具栏
@@ -34,13 +35,15 @@ export interface EditorToolbarProps<T> {
 }
 
 export function EditorToolbar<T>(props: EditorToolbarProps<T>) {
+  const { confirm: customConfirm, Modal } = createConfirm();
+
   const handleImport = async () => {
     const data = await importJson<T>();
     if (data) props.onImport(data);
   };
 
-  const handleReset = () => {
-    if (confirm("确定要重置为预设数据吗？当前修改将丢失。")) {
+  const handleReset = async () => {
+    if (await customConfirm("确定要重置为预设数据吗？当前修改将丢失。")) {
       props.onReset?.();
     }
   };
@@ -51,6 +54,7 @@ export function EditorToolbar<T>(props: EditorToolbarProps<T>) {
       <button class="editor-btn" onClick={handleImport}>导入</button>
       {props.onReset && <button class="editor-btn" onClick={handleReset}>重置预设</button>}
       {props.children}
+      <Modal />
     </div>
   );
 }

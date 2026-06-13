@@ -1,4 +1,5 @@
-import { getImageUrl, FALLBACK_IMAGE } from "@gi-tcg/roguelike";
+import { getImageUrl } from "./roguelike-assets";
+import { FALLBACK_IMAGE } from "@gi-tcg/roguelike";
 import type { JSX } from "solid-js";
 
 export interface SafeImageProps {

@@ -13,9 +13,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import getData from "@gi-tcg/data";
+import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
-import { Match, Show, Switch, createSignal, onMount } from "solid-js";
+import { Match, Show, Switch, createSignal, onCleanup, onMount } from "solid-js";
 import {
   RoguelikeRunManager,
   generateCharacterPool,
@@ -28,6 +28,7 @@ import {
 } from "@gi-tcg/roguelike";
 import { configStore } from "./configStore";
 import { SimpleStorageAdapter } from "./file-storage";
+import { createConfirm } from "./ConfirmModal";
 import { HomeScreen, type DebugMode } from "./pve/HomeScreen";
 import { CharacterSelectScreen } from "./pve/CharacterSelectScreen";
 import { EncounterSelectScreen } from "./pve/EncounterSelectScreen";
@@ -37,7 +38,7 @@ import { ShopScreen } from "./pve/ShopScreen";
 import { EventScreen } from "./pve/EventScreen";
 import { EndScreen } from "./pve/EndScreen";
 
-const data = getData(CURRENT_VERSION);
+const data = getRoguelikeData(CURRENT_VERSION);
 const CHARACTER_POOL = generateCharacterPool(data).sort((a, b) => a.id - b.id);
 
 // 启动时验证硬编码 ID 是否与 GameData 一致
@@ -61,17 +62,23 @@ export function PvEMode(props: PvEModeProps) {
   const [battleActive, setBattleActive] = createSignal(false);
   const [testBattleMode, setTestBattleMode] = createSignal(false);
 
+  // ---- Toast 通知（单信号：空字符串=隐藏） ----
+  const [toast, setToast] = createSignal("");
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  const showToast = (msg: string) => {
+    if (toastTimer) clearTimeout(toastTimer);
+    setToast(msg);
+    toastTimer = setTimeout(() => { toastTimer = null; setToast(""); }, 2000);
+  };
+  onCleanup(() => { if (toastTimer) clearTimeout(toastTimer); });
+
   const GAME_SAVE_KEY = "gi-tcg-game-save";
   const saveStorage = new SimpleStorageAdapter("saves");
 
   function createRunManager(loadSave = false, enableStorage = loadSave) {
     const levelCfg = configStore.levelConfig();
     const storedEvents = configStore.events();
-    const events = storedEvents.length > 0
-      ? storedEvents
-      : (levelCfg.events && levelCfg.events.length > 0)
-        ? levelCfg.events
-        : DEFAULT_EVENTS;
+    const events = [storedEvents, levelCfg.events ?? [], DEFAULT_EVENTS].find(a => a.length > 0)!;
     const config = { ...levelCfg, events };
     const mgr = new RoguelikeRunManager(data, config, configStore.enemyPool(), configStore.cardCosts(), {
       storage: enableStorage ? saveStorage : undefined,
@@ -79,42 +86,64 @@ export function PvEMode(props: PvEModeProps) {
     });
     mgr.setOnUpdate((newRun) => setRun(newRun));
     setRunManager(mgr);
-    setRun(mgr.getRun());
+    if (!loadSave) setRun(mgr.getRun());
+    return mgr;
   }
 
   // 初始注册 onUpdate
   createRunManager();
+
+  // ---- 确认弹窗 ----
+  const { confirm: customConfirm, Modal: ConfirmModalComponent } = createConfirm();
 
   // ---- 导航函数 ----
 
   const resetNav = (view: "home" | "game") => { setViewMode(view); setDebugMode("off"); };
 
   const goHome = () => { createRunManager(); resetNav("home"); setTestBattleMode(false); };
-  const startGame = () => { runManager().clearSave(); createRunManager(false, true); resetNav("game"); };
-  const continueGame = () => { createRunManager(true); resetNav("game"); };
-  const pauseGame = () => { resetNav("home"); checkHasSave(); };
-  const quitGame = () => {
-    if (!confirm("确定放弃本局游戏？当前进度将不会保存。")) return;
+  const startGame = async () => {
+    if (hasSaveValue()) {
+      if (!await customConfirm("已有存档，开始新游戏将覆盖当前存档。确定继续？")) return;
+    }
     runManager().clearSave();
+    setHasSaveValue(false);
+    createRunManager(false, true);
+    resetNav("game");
+  };
+  const continueGame = async () => {
+    const mgr = createRunManager(true);
+    const loaded = await mgr.ready();
+    if (!loaded) { createRunManager(); resetNav("home"); return; }
+    resetNav("game");
+  };
+  const pauseGame = () => { resetNav("home"); checkHasSave(); };
+  const quitGame = async () => {
+    if (!await customConfirm("确定放弃本局游戏？当前进度将不会保存。")) return;
+    runManager().clearSave();
+    setHasSaveValue(false);
     createRunManager();
     resetNav("home");
   };
   const restart = () => { runManager().restart(); setPendingFirst(false); };
 
   const [hasSaveValue, setHasSaveValue] = createSignal(false);
+  const [saveLoading, setSaveLoading] = createSignal(true);
   // 异步检查存档（IndexedDB 需要等待初始化）
   const checkHasSave = async () => {
-    const result = RoguelikeRunManager.hasSave(saveStorage, GAME_SAVE_KEY);
-    if (result instanceof Promise) {
-      setHasSaveValue(await result);
-    } else {
-      setHasSaveValue(result);
-    }
+    setSaveLoading(true);
+    setHasSaveValue(await RoguelikeRunManager.hasSave(saveStorage, GAME_SAVE_KEY));
+    setSaveLoading(false);
   };
   // 组件挂载时检查一次，之后在 pauseGame/quitGame 中刷新
   onMount(() => checkHasSave());
+  // 页面关闭前刷写待存档数据（debounce 兜底，使用同步写入确保 IDB 提交）
+  onMount(() => {
+    const flush = () => { try { runManager().flushSync(); } catch {} };
+    window.addEventListener("beforeunload", flush);
+    onCleanup(() => window.removeEventListener("beforeunload", flush));
+  });
 
-  const canPause = () => { try { return RoguelikeRunManager.canSave(run()); } catch { return false; } };
+  const canPause = () => RoguelikeRunManager.canSave(run());
 
   // ---- 角色选择 ----
   const selectFirstCharacter = (id: number) => { runManager().selectFirstCharacter(id); setPendingFirst(true); };
@@ -123,11 +152,11 @@ export function PvEMode(props: PvEModeProps) {
   const selectEncounter = (index: number) => runManager().selectEncounter(index);
 
   // ---- 奖励 ----
-  const claimReward = (idx: number) => { runManager().claimRewardAndFinish(idx); };
+  const claimReward = (idx: number) => runManager().claimRewardAndFinish(idx, testBattleMode());
 
   // ---- 商店 ----
-  const buyCard = (index: number) => { if (!runManager().buyCard(index)) alert("费用不足！"); };
-  const refreshShop = () => { if (!runManager().refreshShop()) alert("费用不足！"); };
+  const buyCard = (index: number) => { if (!runManager().buyCard(index)) showToast("费用不足！"); };
+  const refreshShop = () => { if (!runManager().refreshShop()) showToast("费用不足！"); };
   const deleteCard = (i: number) => { runManager().deleteCard(i); };
   const finishShop = () => { runManager().finishShop(); };
 
@@ -164,6 +193,7 @@ export function PvEMode(props: PvEModeProps) {
             characterPool={CHARACTER_POOL}
             runManager={runManager}
             hasSave={hasSaveValue}
+            saveLoading={saveLoading}
             onContinue={continueGame}
             onStartGame={startGame}
             onCreateRunManager={createRunManager}
@@ -171,6 +201,7 @@ export function PvEMode(props: PvEModeProps) {
             onSetViewMode={setViewMode}
             onSetTestBattleMode={setTestBattleMode}
             onDebugSelectEncounter={debugSelectEncounter}
+            onShowToast={showToast}
           />
         </Match>
 
@@ -218,6 +249,7 @@ export function PvEMode(props: PvEModeProps) {
             onBattleStateChange={setBattleActive}
             debugMode={debugMode}
             onGoHome={goHome}
+            onShowToast={showToast}
           />
         </Match>
 
@@ -240,6 +272,7 @@ export function PvEMode(props: PvEModeProps) {
             onFinishShop={finishShop}
             debugMode={debugMode}
             onGoHome={goHome}
+            onShowToast={showToast}
           />
         </Match>
 
@@ -260,6 +293,10 @@ export function PvEMode(props: PvEModeProps) {
           <EndScreen state="gameOver" run={run} onRestart={restart} onGoHome={goHome} />
         </Match>
       </Switch>
+      <Show when={toast()}>
+        <div class="pve-toast">{toast()}</div>
+      </Show>
+      <ConfirmModalComponent />
     </div>
   );
 }

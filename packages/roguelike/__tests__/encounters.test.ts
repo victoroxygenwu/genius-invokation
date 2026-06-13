@@ -5,12 +5,11 @@ import {
   getDeleteCost,
   getInterest,
   ENCOUNTER_CURRENCY,
-  BOSS_PHASE_HP,
   SHOP_CARD_PRICE_MIN,
   SHOP_CARD_PRICE_MAX,
-} from "../src/economy";
+} from "../src/data";
 import { rollShopCards } from "../src/card-pool";
-import { generateInitialDeck, generateCharacterCards } from "../src/deck";
+import { generateInitialDeck, generateCharacterCards } from "../src/pool";
 
 // ============================================================
 // getEnemyHp
@@ -67,10 +66,6 @@ describe("economy", () => {
     expect(ENCOUNTER_CURRENCY.normal).toBe(5);
     expect(ENCOUNTER_CURRENCY.elite).toBe(10);
     expect(ENCOUNTER_CURRENCY.boss).toBe(30);
-  });
-
-  test("BOSS_PHASE_HP is 15", () => {
-    expect(BOSS_PHASE_HP).toBe(15);
   });
 
   test("getRefreshCost scales exponentially", () => {
@@ -132,18 +127,20 @@ describe("generateInitialDeck", () => {
     const tagsList = [["sword", "pyro"], ["catalyst", "hydro"]];
     const deck = generateInitialDeck(tagsList);
 
-    // Should have: 2x Best Partner + 2x Hash Brown + 2 weapons + 2 artifacts
-    expect(deck.length).toBeGreaterThanOrEqual(8);
+    // Should have: 2x Hash Brown + 2 weapons + 2 artifacts = 6
+    // Best Partner is now provided by event #2001, not in initial deck
+    expect(deck.length).toBeGreaterThanOrEqual(6);
   });
 
-  test("deck contains Best Partner and Hash Brown", () => {
+  test("deck contains Hash Brown but not Best Partner", () => {
     const tagsList = [["sword", "pyro"]];
     const deck = generateInitialDeck(tagsList);
 
-    // Best Partner = 332001, Hash Brown = 333006
+    // Best Partner = 332001 (now provided by event #2001, not initial deck)
+    // Hash Brown = 333006
     const bestPartnerCount = deck.filter((id) => id === 332001).length;
     const hashBrownCount = deck.filter((id) => id === 333006).length;
-    expect(bestPartnerCount).toBe(2);
+    expect(bestPartnerCount).toBe(0);
     expect(hashBrownCount).toBe(2);
   });
 

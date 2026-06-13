@@ -38,10 +38,12 @@ export interface SimpleStorage {
   getItem(key: string): string | null | Promise<string | null>;
   setItem(key: string, value: string): void | Promise<void>;
   removeItem(key: string): void | Promise<void>;
+  /** 同步写入（用于 beforeunload，跳过异步等待） */
+  writeSync?(key: string, value: string): void;
 }
 
-/** 可序列化的运行状态快照（排除不可序列化的字段） */
-type RunSnapshot = Omit<RoguelikeRun, "currentEvent" | "currentEncounter">;
+/** 可序列化的运行状态快照（排除不可序列化的字段，但保留 currentEventId 用于恢复） */
+type RunSnapshot = Omit<RoguelikeRun, "currentEvent" | "currentEncounter"> & { currentEventId?: number };
 
 export class RoguelikeRunManager {
   private run: RoguelikeRun;
@@ -60,6 +62,8 @@ export class RoguelikeRunManager {
   private saveKey: string | null = null;
   /** 自动存档开关（防止初始化/重启时写入无用存档） */
   private autoSaveEnabled = false;
+  /** 防抖存档定时器 */
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(data: GameData, config: RoguelikeConfig = ROGUELIKE_CONFIG, enemyPool?: EnemyPool, cardCosts?: Record<number, number>, options?: { storage?: SimpleStorage; saveKey?: string; onEventConfirm?: () => void }) {
     this.data = data;
@@ -70,24 +74,19 @@ export class RoguelikeRunManager {
     this.saveKey = options?.saveKey ?? null;
     this.onEventConfirm = options?.onEventConfirm ?? null;
     this.run = this.createInitialRun();
-    // 同步存储直接加载；异步存储需后续调用 ready()
-    if (this.storage && this.saveKey) {
-      const result = this.loadSave();
-      if (typeof result === "boolean" && result) {
-        this.autoSaveEnabled = true;
-      }
-    }
   }
 
-  /** 等待异步存储就绪后加载存档 */
+  /** 加载存档（异步，需在构造后调用） */
   async ready(): Promise<boolean> {
     if (!this.storage || !this.saveKey) return false;
-    const result = await this.loadSave();
-    if (result) {
+    const snap = await this.loadSave();
+    if (snap) {
+      this.fromSnapshot(snap);
       this.autoSaveEnabled = true;
       this.notify();
+      return true;
     }
-    return result;
+    return false;
   }
 
   private getCharacterPool(): CharacterPoolEntry[] {
@@ -143,73 +142,85 @@ export class RoguelikeRunManager {
   private notify(): void {
     // 创建新引用以触发 SolidJS 响应式更新
     this.onUpdate?.({ ...this.run });
-    // 自动存档
-    if (this.autoSaveEnabled) this.persistRun();
+    // 自动存档（防抖：快速连续操作只写入最后一次）
+    if (this.autoSaveEnabled) {
+      if (this.saveTimer) clearTimeout(this.saveTimer);
+      this.saveTimer = setTimeout(() => { this.saveTimer = null; this.persistRun(); }, 500);
+    }
   }
 
   // ============================================================
   // 存档系统
   // ============================================================
 
-  private static readonly SNAPSHOT_REPLACER = (key: string, value: unknown) =>
-    key === "currentEvent" || key === "currentEncounter" ? undefined : value;
+  private static prepareSnapshot(run: RoguelikeRun): RunSnapshot {
+    const { currentEvent, currentEncounter: _, ...rest } = run;
+    return { ...rest, currentEventId: currentEvent?.id };
+  }
 
   /** 从快照恢复运行状态 */
   private fromSnapshot(snap: RunSnapshot): void {
     Object.assign(this.run, snap);
     this.run.currentEncounter = null;
-    this.run.currentEvent = null;
+    // 从 currentEventId 恢复 currentEvent
+    if (snap.currentEventId) {
+      const events = this.config.events ?? [];
+      this.run.currentEvent = events.find((e) => e.id === snap.currentEventId)
+        ?? DEFAULT_EVENTS.find((e) => e.id === snap.currentEventId)
+        ?? null;
+    } else {
+      this.run.currentEvent = null;
+    }
   }
 
-  /** 保存当前状态到存储 */
-  save(): void | Promise<void> {
-    this.persistRun();
+  /** 同步刷写存档（用于 beforeunload，跳过异步等待） */
+  flushSync(): void {
+    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+    if (!this.storage || !this.saveKey) return;
+    try {
+      const json = this.serializeRun();
+      if (this.storage.writeSync) {
+        this.storage.writeSync(this.saveKey, json);
+      } else {
+        this.storage.setItem(this.saveKey, json);
+      }
+    } catch { /* ignore */ }
+  }
+
+  private serializeRun(): string {
+    return JSON.stringify(RoguelikeRunManager.prepareSnapshot(this.run));
   }
 
   /** 序列化并持久化当前运行状态 */
   private persistRun(): void | Promise<void> {
     if (!this.storage || !this.saveKey) return;
     try {
-      const result = this.storage.setItem(
-        this.saveKey,
-        JSON.stringify(this.run, RoguelikeRunManager.SNAPSHOT_REPLACER),
-      );
+      const result = this.storage.setItem(this.saveKey, this.serializeRun());
       if (result instanceof Promise) result.catch(() => {});
-    } catch { /* quota exceeded */ }
+    } catch { /* storage write failed */ }
   }
 
-  /** 从存储加载存档，返回是否成功（支持异步存储） */
-  private loadSave(): boolean | Promise<boolean> {
-    if (!this.storage || !this.saveKey) return false;
+  /** 从存储加载存档，返回有效快照或 null */
+  private async loadSave(): Promise<RunSnapshot | null> {
+    if (!this.storage || !this.saveKey) return null;
     try {
-      const raw = this.storage.getItem(this.saveKey);
-      if (raw instanceof Promise) {
-        return raw.then((r) => this.processLoadedSave(r));
-      }
-      return this.processLoadedSave(raw);
-    } catch { return false; }
+      const raw = await this.storage.getItem(this.saveKey);
+      const snap = RoguelikeRunManager.parseAndValidate(raw);
+      if (!snap && raw) this.clearSave();
+      return snap;
+    } catch { return null; }
   }
 
-  /** 校验快照是否为可恢复的有效存档 */
-  private static isValidSaveSnapshot(snap: RunSnapshot | null): boolean {
-    return typeof snap?.floor === "number" &&
-      Array.isArray(snap?.characters) && snap.characters.length > 0 &&
-      snap.state !== "victory" && snap.state !== "gameOver" && snap.state !== "characterSelect";
-  }
-
-  /** 解析并校验 JSON 字符串是否为有效存档 */
-  private static parseAndValidate(raw: string | null): boolean {
-    if (!raw) return false;
-    try { return RoguelikeRunManager.isValidSaveSnapshot(JSON.parse(raw)); } catch { return false; }
-  }
-
-  private processLoadedSave(raw: string | null): boolean {
-    if (!RoguelikeRunManager.parseAndValidate(raw)) {
-      if (raw) this.clearSave();
-      return false;
-    }
-    this.fromSnapshot(JSON.parse(raw!) as RunSnapshot);
-    return true;
+  /** 解析并校验 JSON 字符串，返回有效快照或 null */
+  private static parseAndValidate(raw: string | null): RunSnapshot | null {
+    if (!raw) return null;
+    try {
+      const snap = JSON.parse(raw) as RunSnapshot;
+      return (typeof snap.floor === "number" &&
+        Array.isArray(snap.characters) && snap.characters.length > 0 &&
+        snap.state !== "victory" && snap.state !== "gameOver" && snap.state !== "characterSelect")
+        ? snap : null;
+    } catch { return null; }
   }
 
   /** 清除存档 */
@@ -221,13 +232,10 @@ export class RoguelikeRunManager {
   }
 
   /** 是否有可用存档 */
-  static hasSave(storage: SimpleStorage, saveKey: string): boolean | Promise<boolean> {
+  static async hasSave(storage: SimpleStorage, saveKey: string): Promise<boolean> {
     try {
-      const raw = storage.getItem(saveKey);
-      if (raw instanceof Promise) {
-        return raw.then((r) => RoguelikeRunManager.parseAndValidate(r));
-      }
-      return RoguelikeRunManager.parseAndValidate(raw);
+      const raw = await storage.getItem(saveKey);
+      return RoguelikeRunManager.parseAndValidate(raw) !== null;
     } catch { return false; }
   }
 
@@ -240,12 +248,14 @@ export class RoguelikeRunManager {
   // 开局选 2 个角色
   // ============================================================
 
+  /** 选择第一个角色（暂存，等待第二个选择） */
   selectFirstCharacter(characterId: number): void {
     this.pendingFirstCharacter = characterId;
     this.run.availableCharacters = rollCharacterChoices(CHARACTER_CHOICE_COUNT, this.data, [characterId], this.getCharacterPool());
     this.notify();
   }
 
+  /** 选择第二个角色，完成开局选角并进入游戏 */
   selectSecondCharacter(characterId: number): void {
     if (this.pendingFirstCharacter === null) return;
     this.run.characters = [this.pendingFirstCharacter, characterId];
@@ -293,6 +303,12 @@ export class RoguelikeRunManager {
   // 层与路线
   // ============================================================
 
+  /**
+   * 核心状态机：处理当前路径节点
+   * - 无节点时：进入下一层或通关
+   * - 跳过普通战斗：由事件效果触发
+   * - shop/event/战斗节点：设置对应状态
+   */
   private processCurrentNode(): void {
     const node = this.getCurrentNode();
     if (!node) {
@@ -460,6 +476,11 @@ export class RoguelikeRunManager {
     }
   }
 
+  /**
+   * 创建战斗 Game 实例
+   * @param encounter - 当前遭遇配置
+   * @returns game 实例和玩家标识（始终为 0，表示玩家先手）
+   */
   createBattleGame(encounter: Encounter): { game: Game; playerWho: 0 } {
     const playerDeck: DeckConfig = {
       characters: this.run.characters,
@@ -504,6 +525,12 @@ export class RoguelikeRunManager {
     return { ...state, players: players as unknown as typeof state.players };
   }
 
+  /**
+   * 准备敌方战斗状态
+   * - 应用 HP 覆盖和 HP 修正
+   * - 解析修饰器（满能量、支援牌、状态等）
+   * - 使用偏移量避免多敌人 ID 冲突
+   */
   private prepareEnemyState(state: GameState, encounter: Encounter): GameState {
     const configs = encounter.configs;
     const enemyHpModifier = this.run.nextBattleEnemyHpModifier;
@@ -543,15 +570,29 @@ export class RoguelikeRunManager {
     }));
   }
 
+  /**
+   * 准备我方战斗状态
+   * - 应用全局 HP 修正（nextBattleAllyHpModifier）
+   * - 应用单角色 HP 修正（characterHpModifiers）
+   * - 修正后 HP 不低于 1，maxHP 只增不减
+   */
   private prepareAllyState(state: GameState): GameState {
     const allyHpModifier = this.run.nextBattleAllyHpModifier;
-    if (allyHpModifier === 0) return state;
+    const charHpModifiers = this.run.characterHpModifiers ?? {};
+    const hasGlobal = allyHpModifier !== 0;
+    const hasPerChar = Object.keys(charHpModifiers).length > 0;
+    if (!hasGlobal && !hasPerChar) return state;
     this.run.nextBattleAllyHpModifier = 0;
+    this.run.characterHpModifiers = {};
 
     return this.applyPlayerHpModifier(state, 0, (char: any) => {
+      const charId = char.definition?.id ?? char.id;
+      const perCharMod = charHpModifiers[charId] ?? 0;
+      const totalMod = allyHpModifier + perCharMod;
+      if (totalMod === 0) return char;
       const currentHp = char.variables.health ?? 10;
       const maxHp = char.variables.maxHealth ?? 10;
-      const newHp = Math.max(1, currentHp + allyHpModifier);
+      const newHp = Math.max(1, currentHp + totalMod);
       const newMaxHp = Math.max(maxHp, newHp);
       return {
         ...char,
@@ -568,15 +609,26 @@ export class RoguelikeRunManager {
     return this.run.rewardItems;
   }
 
-  claimRewardAndFinish(rewardIndex: number): void {
+  claimRewardAndFinish(rewardIndex: number, testMode = false): void {
     const reward = this.run.rewardItems[rewardIndex];
     if (reward) {
       this.run.deck = [...this.run.deck, reward.cardId];
     }
-    this.run.rewardItems = [];
-    this.run.currentEncounter = null;
-    this.run.currentNodeIndex++;
-    this.processCurrentNode();
+    if (testMode) {
+      // 测试模式：刷新奖励列表但不推进节点
+      this.run.rewardItems = rollCards(this.config.rewardCardCount, {
+        data: this.data,
+        characterIds: this.run.characters,
+        floor: this.run.floor,
+        deck: this.run.deck,
+      });
+      this.notify();
+    } else {
+      this.run.rewardItems = [];
+      this.run.currentEncounter = null;
+      this.run.currentNodeIndex++;
+      this.processCurrentNode();
+    }
   }
 
   // ============================================================
@@ -601,8 +653,8 @@ export class RoguelikeRunManager {
     const item = this.run.shopItems[index];
     if (!item || this.run.currency < item.cost) return false;
     this.run.currency -= item.cost;
-    this.run.deck.push(item.cardId);
     // 创建新数组以触发 SolidJS 响应式更新
+    this.run.deck = [...this.run.deck, item.cardId];
     this.run.shopItems = this.run.shopItems.filter((_, i) => i !== index);
     this.notify();
     return true;
@@ -643,7 +695,7 @@ export class RoguelikeRunManager {
   /** 事件删除卡牌：不扣费、不计入全局删除次数 */
   eventRemoveCard(deckIndex: number): boolean {
     if (deckIndex < 0 || deckIndex >= this.run.deck.length) return false;
-    this.run.deck.splice(deckIndex, 1);
+    this.run.deck = this.run.deck.filter((_, i) => i !== deckIndex);
     this.run.pendingChooseAndRemoveCard = false;
     this.notify();
     return true;

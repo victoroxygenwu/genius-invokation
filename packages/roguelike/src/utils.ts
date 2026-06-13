@@ -16,6 +16,19 @@
 import { DEFAULT_ASSETS_MANAGER } from "@gi-tcg/assets-manager";
 
 // ============================================================
+// Tauri 环境检测
+// ============================================================
+
+const IS_TAURI = "__TAURI_INTERNALS__" in globalThis;
+
+/**
+ * Tauri 本地图片基础路径。
+ * 可通过全局变量 __TAURI_ASSETS_BASE__ 自定义（默认 "asset://localhost"）。
+ */
+const TAURI_ASSETS_BASE: string =
+  (globalThis as any).__TAURI_ASSETS_BASE__ ?? "asset://localhost";
+
+// ============================================================
 // 卡牌/角色名称和图片
 // ============================================================
 
@@ -24,8 +37,26 @@ export function getCardName(id: number): string {
   return DEFAULT_ASSETS_MANAGER.getNameSync(id) ?? `Card #${id}`;
 }
 
-/** 卡牌/角色图片 URL */
+/** 获取卡牌描述文本（用于 tooltip） */
+export function getCardDescription(id: number): string {
+  try {
+    const data = DEFAULT_ASSETS_MANAGER.getDataSync(id) as unknown as Record<string, unknown>;
+    return (data.description as string) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 获取卡牌/角色图片 URL。
+ *
+ * - Tauri 模式：返回本地资源路径 `asset://localhost/images/cards/{id}.webp`
+ * - Web 模式：返回远程 API URL
+ */
 export function getImageUrl(id: number): string {
+  if (IS_TAURI) {
+    return `${TAURI_ASSETS_BASE}/images/cards/${id}.webp`;
+  }
   return DEFAULT_ASSETS_MANAGER.getImageUrlSync(id, { type: "cardFace" });
 }
 

@@ -19,6 +19,7 @@
 import "./begin";
 
 import "./commons";
+import "./pve";
 import "./cards/equipment/artifacts";
 import "./cards/equipment/techniques";
 import "./cards/equipment/weapon/bow";

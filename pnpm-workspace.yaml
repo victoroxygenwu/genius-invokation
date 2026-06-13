@@ -19,7 +19,7 @@ catalog:
   execa: ^9.6.1
 
 patchedDependencies:
-  ohm-js@17.1.0: patches/ohm-js@17.1.0.patch
+  # ohm-js@17.5.0: patches/ohm-js@17.5.0.patch  # 暂时禁用，patch 与 17.5.0 不兼容
   puppeteer-screen-recorder@3.0.6: patches/puppeteer-screen-recorder@3.0.6.patch
 
 allowBuilds:
@@ -35,3 +35,4 @@ allowBuilds:
   keytar: true
   prisma: true
   puppeteer: true
+  sharp: true

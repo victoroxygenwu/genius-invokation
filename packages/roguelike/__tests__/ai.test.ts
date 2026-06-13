@@ -168,8 +168,9 @@ describe("AI action selection", () => {
     }));
 
     const value = getResponseValue(result);
-    // AI filters to valid actions first, so validNormal is at index 0 in filtered list
-    expect(value.chosenActionIndex).toBe(0);
+    // AI returns original array index, not filtered index
+    // validNormal is at index 1 in the original array
+    expect(value.chosenActionIndex).toBe(1);
   });
 });
 

@@ -49,39 +49,39 @@ export function makeEntityState(id: number, def: EntityDefinition, variableOverr
 // 解析器表
 // ============================================================
 
-type EntityResolver = (mod: EnemyModifier, charId: number, lookup: (id: number) => EntityDefinition | undefined) => EntityDefinition[];
+type ResolvedEntity = { def: EntityDefinition; overrides?: Record<string, number> };
+type EntityResolver = (mod: EnemyModifier, charId: number, lookup: (id: number) => EntityDefinition | undefined) => ResolvedEntity[];
 
 const simpleResolver = (statusId: number): EntityResolver =>
   (_mod, _charId, lookup) => {
     const def = lookup(statusId);
-    return def ? [def] : [];
+    return def ? [{ def }] : [];
+  };
+
+/** value2 有值时作为次数，否则用 value；单实例 + overrides 设置初始 usage */
+const usageResolver = (statusId: number): EntityResolver =>
+  (mod, _charId, lookup) => {
+    const def = lookup(statusId);
+    const count = ("value2" in mod && typeof mod.value2 === "number") ? mod.value2 : modNum(mod, 1);
+    return def ? [{ def, overrides: { usage: count } }] : [];
   };
 
 const ENTITY_RESOLVERS: Partial<Record<EnemyModifierType, EntityResolver>> = {
   immuneControl: simpleResolver(KNOWN_STATUS_IDS.IMMUNE_CONTROL),
   revive: (mod, _charId, lookup) => {
-    const def = lookup(KNOWN_STATUS_IDS.REVIVE);
-    return def ? Array(modNum(mod, 1)).fill(def) : [];
+    const def = lookup(KNOWN_STATUS_IDS.PVE_FULL_REVIVE) ?? lookup(KNOWN_STATUS_IDS.REVIVE);
+    const count = modNum(mod, 1);
+    return def ? [{ def, overrides: { usage: count } }] : [];
   },
-  damageReduction: (mod, _charId, lookup) => {
-    const def = lookup(KNOWN_STATUS_IDS.DAMAGE_REDUCTION);
-    // value=每次减免量, value2=触发次数; value2 默认 1
-    const count = modNum(mod, 1) * (("value2" in mod && typeof mod.value2 === "number") ? mod.value2 : 1);
-    return def ? Array(count).fill(def) : [];
-  },
-  damageBoost: (mod, _charId, lookup) => {
-    const def = lookup(KNOWN_STATUS_IDS.DAMAGE_BOOST);
-    // value=每次增加量, value2=触发次数; value2 默认 1
-    const count = modNum(mod, 1) * (("value2" in mod && typeof mod.value2 === "number") ? mod.value2 : 1);
-    return def ? Array(count).fill(def) : [];
-  },
+  damageReduction: usageResolver(KNOWN_STATUS_IDS.DAMAGE_REDUCTION),
+  damageBoost: usageResolver(KNOWN_STATUS_IDS.DAMAGE_BOOST),
   innateTalent: (_mod, charId, lookup) => {
     const def = lookup(getTalentCardId(charId));
-    return def && def.type === "equipment" ? [def] : [];
+    return def && def.type === "equipment" ? [{ def }] : [];
   },
   innateArtifact: (mod, _charId, lookup) => {
     const def = lookup(modNum(mod, 0));
-    return def && def.type === "equipment" && (def.tags as readonly string[]).includes("artifact") ? [def] : [];
+    return def && def.type === "equipment" && (def.tags as readonly string[]).includes("artifact") ? [{ def }] : [];
   },
 };
 
@@ -104,9 +104,9 @@ export function resolveModifier(
   // 1. 状态实体（通过解析器表）
   const resolver = ENTITY_RESOLVERS[mod.type];
   if (resolver) {
-    const defs = resolver(mod, characterId, lookup);
-    for (const def of defs) {
-      effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
+    const resolved = resolver(mod, characterId, lookup);
+    for (const { def, overrides } of resolved) {
+      effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def, overrides) });
     }
   }
 
@@ -118,14 +118,14 @@ export function resolveModifier(
     }
   }
 
-  // 3. 料理效果（每回合随机加入食物卡到手牌，由 AI 使用）
+  // 3. 料理效果（value=0 为随机料理状态，value>0 为指定食物卡）
   if (mod.type === "autoDish") {
-    const rounds = modNum(mod, 1);
-    const def = lookup(KNOWN_STATUS_IDS.AUTO_DISH_PER_ROUND);
-    if (def) {
-      for (let i = 0; i < rounds; i++) {
-        effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
-      }
+    const cardId = modNum(mod, 0);
+    if (cardId > 0) {
+      effects.push({ kind: "handCard", cardId });
+    } else {
+      const def = lookup(KNOWN_STATUS_IDS.AUTO_DISH_PER_ROUND);
+      if (def) effects.push({ kind: "status", entity: makeEntityState(SYNTHETIC_ENTITY_ID_MODIFIER, def) });
     }
   } else if (mod.type === "innateTalent") {
     const talentId = getTalentCardId(characterId);

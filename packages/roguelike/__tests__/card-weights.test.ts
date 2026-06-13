@@ -135,12 +135,11 @@ describe("computeCardWeights", () => {
 
 describe("rollCards with weights", () => {
   test("weighted card appears more often than unweighted", () => {
-    // Set up: card 200 is strongly related to card 100
-    setCardWeight(100, 200, 0.9);
-
-    // Create a pool of 10 cards, one of which (200) is related to deck card 100
-    const pool = Array.from({ length: 10 }, (_, i) => (i + 1) * 100);
-    const deckCards = [100];
+    // Use real card IDs from DEFAULT_CARD_POOL
+    // 311502 (祭礼剑) and 311202 (祭礼弓) are both in the pool
+    const deckCardId = 311502;
+    const relatedCardId = 311202;
+    setCardWeight(deckCardId, relatedCardId, 0.9);
 
     // Roll many times and count occurrences
     const counts = new Map<number, number>();
@@ -148,25 +147,26 @@ describe("rollCards with weights", () => {
     const ROLL_COUNT = 3;
 
     for (let t = 0; t < TRIALS; t++) {
-      const cards = rollCards(ROLL_COUNT, { deckCards });
+      const cards = rollCards(ROLL_COUNT, { deck: [deckCardId] });
       for (const c of cards) {
         counts.set(c.cardId, (counts.get(c.cardId) ?? 0) + 1);
       }
     }
 
-    const count200 = counts.get(200) ?? 0;
-    const avgOther = pool
-      .filter((id) => id !== 200)
-      .reduce((sum, id) => sum + (counts.get(id) ?? 0), 0) / 9;
+    const countRelated = counts.get(relatedCardId) ?? 0;
+    const otherCounts = [...counts.entries()]
+      .filter(([id]) => id !== relatedCardId && id !== deckCardId)
+      .map(([, c]) => c);
+    const avgOther = otherCounts.length > 0
+      ? otherCounts.reduce((s, c) => s + c, 0) / otherCounts.length
+      : 0;
 
-    // Card 200 (weight ~1.9) should appear significantly more than others (weight ~1.0)
-    // Expected ratio: ~1.9/1.0 = 1.9x
-    // Use 1.3x as a conservative lower bound to account for variance
-    expect(count200).toBeGreaterThan(avgOther * 1.3);
+    // Related card (weight ~1.9) should appear significantly more than others (weight ~1.0)
+    // Use 1.2x as a conservative lower bound to account for variance
+    expect(countRelated).toBeGreaterThan(avgOther * 1.2);
   });
 
-  test("no deckCards falls back to uniform sampling", () => {
-    const pool = Array.from({ length: 5 }, (_, i) => (i + 1) * 100);
+  test("no deck falls back to uniform sampling", () => {
     const cards = rollCards(3);
     expect(cards).toHaveLength(3);
     // Should not throw, just uniform random
