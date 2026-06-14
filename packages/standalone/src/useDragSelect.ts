@@ -20,6 +20,9 @@ function defaultResolveId(e: PointerEvent, excludeSelectors?: string): number | 
   if (excludeSelectors && el.closest(excludeSelectors)) return null;
   const item = el.closest("[data-card-id]") as HTMLElement | null;
   if (!item) return null;
+  // 排除卡片内部的交互式子元素，避免拖拽捕获阻止其 click 事件
+  const interactive = el.closest("button, select, input, label");
+  if (interactive && item.contains(interactive)) return null;
   return Number(item.dataset.cardId) || null;
 }
 

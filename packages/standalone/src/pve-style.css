@@ -546,18 +546,19 @@
 /* 权重编辑顶部固定区域（工具栏 + 主体信息） */
 .pve-weight-sticky-top {
   position: sticky;
-  top: 0;
-  z-index: 10;
+  top: -20px;
+  z-index: 11;
   background: #1e293b;
-  padding-bottom: 0.3rem;
+  padding-top: 20px;
+  padding-bottom: 0.15rem;
 }
 
 .pve-weight-top-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-top: 0.3rem;
+  margin-bottom: 0.3rem;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
@@ -633,6 +634,44 @@
 .pve-weight-batch-reject {
   padding: 0.2rem 0.5rem;
   font-size: 0.8rem;
+}
+
+/* 第二段 sticky：多选 + 批量调节 + 删除（两行，堆叠在 sticky-top 下方） */
+.pve-weight-sticky-bar {
+  position: sticky;
+  top: 74px;
+  z-index: 9;
+  background: #1e293b;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  margin-top: 0.15rem;
+  margin-bottom: 0.2rem;
+}
+
+.pve-weight-sticky-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.pve-weight-sticky-bar-row:not(:last-child) {
+  padding-bottom: 0.2rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.pve-weight-sticky-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.pve-weight-sticky-bar .btn-sm {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
 }
 
 /* 关联列表 */

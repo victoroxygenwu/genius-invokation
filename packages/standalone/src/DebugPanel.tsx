@@ -5,6 +5,7 @@ import {
   generateCardPool,
   rollShopCards,
   analyzeRelationships,
+  getFullCardPool,
   createEncounter,
   DEFAULT_SHOP_CARD_COST,
   type RoguelikeRunManager,
@@ -301,7 +302,7 @@ export function DebugPanel(props: DebugPanelProps) {
 
       <Show when={activePanel() === "cardWeights"}>
         <OverlayPanel title="⚖️ 权重编辑" onClose={() => setActivePanel(null)}>
-          <CardWeightEditor cardPool={testCardPool()} characterPool={props.characterPool} suggestedPairs={suggestedPairs()} />
+          <CardWeightEditor cardPool={getFullCardPool()} characterPool={props.characterPool} suggestedPairs={suggestedPairs()} />
         </OverlayPanel>
       </Show>
 

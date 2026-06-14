@@ -1,9 +1,10 @@
 import { createSignal, type Accessor, type Setter } from "solid-js";
 import type { EnemyConfig, RoguelikeConfig, CardWeightPair, EventDefinition, CardWeightStorageAdapter, EnemyPool } from "@gi-tcg/roguelike";
-import { CardWeightManager } from "@gi-tcg/roguelike";
+import { CardWeightManager, DEFAULT_EVENTS } from "@gi-tcg/roguelike";
 export type { EnemyPool } from "@gi-tcg/roguelike";
 import defaultEnemies from "./config/enemies.json";
 import defaultLevels from "./config/levels.json";
+import defaultCardWeights from "./config/default-card-weights.json";
 import { createBestStorage } from "./file-storage";
 
 // ============================================================
@@ -122,7 +123,7 @@ export class ConfigStore {
     this._setCardWeights = setCwData;
 
     const [ev, setEv] = createSignal<EventDefinition[]>(
-      storage.load<EventDefinition[]>(EVENTS_KEY, [])
+      storage.load<EventDefinition[]>(EVENTS_KEY, structuredClone(DEFAULT_EVENTS))
     );
     this.events = ev;
     this._setEvents = setEv;
@@ -181,6 +182,10 @@ export class ConfigStore {
     this.storage.save(CARD_WEIGHTS_KEY, data);
   }
 
+  resetCardWeights(): void {
+    this.setCardWeights(structuredClone(defaultCardWeights) as { version: number; pairs: CardWeightPair[] });
+  }
+
   // ---- 已忽略建议 ----
 
   setDismissed(keys: string[]): void {
@@ -209,9 +214,13 @@ export class ConfigStore {
     this.storage.save(EVENTS_KEY, events);
   }
 
+  resetEvents(): void {
+    this.setEvents(structuredClone(DEFAULT_EVENTS));
+  }
+
   // ---- 统一操作 ----
 
-  exportAll(): void {
+  async exportAll(): Promise<boolean> {
     const all = {
       enemyPool: this.enemyPool(),
       levelConfig: this.levelConfig(),
@@ -221,7 +230,7 @@ export class ConfigStore {
       cardCosts: this.cardCosts(),
       events: this.events(),
     };
-    exportJson(all, "roguelike-config.json");
+    return await exportJson(all, "roguelike-config.json");
   }
 
   async importAll(): Promise<boolean> {
@@ -248,11 +257,11 @@ export class ConfigStore {
   resetAll(): void {
     this.resetEnemyPool();
     this.resetLevelConfig();
-    this.setCardWeights({ version: 1, pairs: [] });
+    this.resetCardWeights();
     this.setDismissed([]);
     this.setCategoryWeights({});
     this.setCardCosts({});
-    this.setEvents([]);
+    this.resetEvents();
   }
 }
 

@@ -1,8 +1,8 @@
-import type { EventConditionType, EventEffectType } from "./types";
-import { getCardName } from "./utils";
+import type { EventConditionType, EventEffectType } from "@gi-tcg/roguelike";
+import { getCardName } from "./roguelike-assets";
 
 // ============================================================
-// 字段描述符
+// 字段描述符（编辑器 UI）
 // ============================================================
 
 /** 编辑器字段描述符：定义事件条件/效果的某个参数的 UI 控件类型 */
@@ -15,7 +15,7 @@ export type FieldDescriptor =
   | { key: string; label?: string; type: "tagSelect" };
 
 // ============================================================
-// 条件描述符
+// 描述符接口
 // ============================================================
 
 /** 条件类型描述符：标签、字段列表、人类可读描述、默认值 */
@@ -26,10 +26,6 @@ export interface ConditionDescriptor {
   describe: (data: any) => string;
   default: EventConditionType;
 }
-
-// ============================================================
-// 效果描述符
-// ============================================================
 
 /** 效果类型描述符：标签、字段列表、人类可读描述、默认值 */
 export interface EffectDescriptor {

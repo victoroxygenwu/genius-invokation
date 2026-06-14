@@ -22,7 +22,6 @@ import type {
 } from "./types";
 import { getCardName, sample } from "./utils";
 import { FALLBACK_EVENT_IDS } from "./data";
-import { CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS } from "./event-descriptors";
 
 // ============================================================
 // 共享常量
@@ -330,17 +329,45 @@ function applySingleEffect(
 }
 
 // ============================================================
-// 辅助函数
+// 辅助函数（简短描述，不依赖 UI 描述符）
 // ============================================================
 
 /** 获取事件效果的简短描述（用于 UI 显示） */
 export function getEffectDescription(effect: EventEffectType, _data: GameData): string {
-  const desc = EFFECT_DESCRIPTORS[effect.type];
-  return desc?.describe(effect) ?? `[${effect.type}]`;
+  switch (effect.type) {
+    case "addCurrency": return `获得 ${effect.amount} 费用`;
+    case "removeCurrency": return `失去 ${effect.amount} 费用`;
+    case "addCard": return `获得 ${getCardName(effect.cardId)}${(effect.count ?? 1) > 1 ? ` ×${effect.count}` : ""}`;
+    case "removeCard": return `移除 ${getCardName(effect.cardId)}${(effect.count ?? 1) > 1 ? ` ×${effect.count}` : ""}`;
+    case "modifyCharacterMaxHp": return `${effect.amount > 0 ? "+" : ""}${effect.amount} 角色生命上限`;
+    case "addCharacter": return `获得角色：${getCardName(effect.characterId)}`;
+    case "modifyNextBattleAllyHp": return `下场战斗我方全体 HP ${effect.amount > 0 ? "+" : ""}${effect.amount}`;
+    case "modifyNextBattleEnemyHp": return `下场战斗敌方全体 HP ${effect.amount > 0 ? "+" : ""}${effect.amount}`;
+    case "skipNextNormalBattle": return "跳过下一个普通战斗节点（无奖励）";
+    case "chooseAndRemoveCard": return "选择删除卡组中的一张卡";
+    case "randomCard": return `随机获得 ${effect.tag} ×${effect.count ?? 1}`;
+    default: return `[${(effect as EventEffectType).type}]`;
+  }
 }
 
 /** 获取条件的简短描述（用于编辑器显示） */
 export function getConditionDescription(cond: EventConditionType, _data: GameData): string {
-  const desc = CONDITION_DESCRIPTORS[cond.type];
-  return desc?.describe(cond) ?? `[${cond.type}]`;
+  switch (cond.type) {
+    case "hasCard": return `卡组中有 ${getCardName(cond.cardId)}${(cond.minCount ?? 1) > 1 ? ` ×${cond.minCount}` : ""}`;
+    case "hasAnyCards": return `卡组中有 ${(cond.cardIds ?? []).map((id: number) => getCardName(id)).join("/")} 之一`;
+    case "hasCharacterTag": return `队伍中有 ${cond.minCount ?? 1} 个 ${cond.tag} 角色`;
+    case "hasCharacter": return `队伍中有 ${getCardName(cond.characterId)}`;
+    case "hasAllCharacters": return `队伍中有 ${(cond.characterIds ?? []).map((id: number) => getCardName(id)).join(" 和 ")}`;
+    case "noCharacter": return `队伍中没有 ${getCardName(cond.characterId)}`;
+    case "defeatedEnemy": return `已击败 ${getCardName(cond.enemyId)}`;
+    case "floorAtLeast": return `到达第 ${cond.floor} 层`;
+    case "currencyAtLeast": return `费用 ≥ ${cond.amount}`;
+    case "deckSizeAtLeast": return `卡组 ≥ ${cond.count} 张`;
+    case "teamSizeAtLeast": return `队伍 ≥ ${cond.count} 人`;
+    case "teamSizeAtMost": return `队伍 ≤ ${cond.count} 人`;
+    case "teamOnlyElements": return `队伍仅由 ${(cond.elements ?? []).join("/")} 元素构成`;
+    case "anyEventCompleted": return `已完成事件：${(cond.eventIds ?? []).join(", ")}`;
+    case "noEventCompleted": return `未完成事件：${(cond.eventIds ?? []).join(", ")}`;
+    default: return `[${(cond as EventConditionType).type}]`;
+  }
 }

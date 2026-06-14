@@ -23,8 +23,7 @@
  * - **card-pool** — 可用卡池生成与加权随机抽取
  * - **events** — 事件条件评估、选择、效果应用与文本渲染
  * - **card-weights** — 卡牌关联权重管理（含多源扩散算法）
- * - **card-relationships** — 基于标签和描述的卡牌关系自动分析
- * - **event-descriptors** — 事件条件/效果的字段描述符（编辑器 UI 用）
+ * - **card-relationships** — 基于标签和描述的卡牌关系自动分析（含多源扩散和文本语料分析）
  * - **modifier-resolver** — 敌人修饰器解析（状态、支援牌、标记）
  * - **run** — RoguelikeRunManager 运行管理器（状态机、存档、战斗）
  * - **ai** — 敌人简单优先级 AI
@@ -164,15 +163,7 @@ export {
   defaultCardRelationshipAnalyzer,
   analyzeRelationships,
   getAllCharacters,
+  getFullCardPool,
 } from "./card-relationships";
 export type { SuggestedPair } from "./card-relationships";
 
-// ============================================================
-// 事件描述符（编辑器 UI）
-// ============================================================
-
-export {
-  CONDITION_DESCRIPTORS,
-  EFFECT_DESCRIPTORS,
-} from "./event-descriptors";
-export type { FieldDescriptor, ConditionDescriptor, EffectDescriptor } from "./event-descriptors";

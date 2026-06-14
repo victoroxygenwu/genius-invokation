@@ -8,7 +8,7 @@ import {
 } from "@gi-tcg/roguelike";
 import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
-import { EditorToolbar } from "./EditorToolbar";
+import { EditorToolbar, AutosaveHint } from "./EditorToolbar";
 import { OverlayPanel } from "./OverlayPanel";
 import { SafeImage } from "./SafeImage";
 import { NumberInput } from "./NumberInput";
@@ -100,7 +100,7 @@ function ModifierRow(p: { mod: EnemyModifier; i: number; onUpdate: (i: number, m
           onChange={(id) => p.onUpdate(p.i, { ...p.mod, value: id } as EnemyModifier)}
         />
       </Show>
-      <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => p.onRemove(p.i)}>✕</button>
+      <button class="editor-btn-icon editor-btn-icon-danger" onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onRemove(p.i)}>✕</button>
     </div>
   );
 }
@@ -189,9 +189,9 @@ export function EnemyEditor(p: EnemyEditorProps) {
           filename="enemy-config.json"
           getData={pools}
           onImport={(d: { normal: EnemyConfig[]; elite: EnemyConfig[]; boss: EnemyConfig[] }) => setPools({ normal: d.normal ?? [], elite: d.elite ?? [], boss: d.boss ?? [] })}
-          onReset={() => { setPools(structuredClone(defaultEnemies) as EnemyPool); }}
+          onReset={() => { configStore.resetEnemyPool(); setPools(structuredClone(defaultEnemies) as EnemyPool); }}
         >
-          <span class="editor-autosave-hint">✓ 自动保存</span>
+          <AutosaveHint />
         </EditorToolbar>
       }
     >
@@ -206,7 +206,7 @@ export function EnemyEditor(p: EnemyEditorProps) {
               <button class={`ee-btn-lock ${cfg.locked ? "ee-btn-lock-active" : ""}`} onClick={() => update(i(), { ...cfg, locked: !cfg.locked })} title={cfg.locked ? "已锁定：关卡编辑不会修改此配置" : "未锁定：关卡编辑会同步修改"}>
                 {cfg.locked ? "🔒" : "🔓"}
               </button>
-              <button class="ee-btn-delete" onClick={() => remove(i())}>删除</button>
+              <button class="ee-btn-delete" onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(i())}>删除</button>
             </div>
           )}
         </For>

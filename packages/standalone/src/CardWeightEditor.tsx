@@ -24,7 +24,8 @@ import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
 import { SafeImage } from "./SafeImage";
 import { useDragSelect } from "./useDragSelect";
-import { EditorToolbar } from "./EditorToolbar";
+import { EditorToolbar, AutosaveHint } from "./EditorToolbar";
+import { createConfirm } from "./ConfirmModal";
 
 export interface CardWeightEditorProps {
   cardPool: { cardId: number; name: string }[];
@@ -32,24 +33,45 @@ export interface CardWeightEditorProps {
   suggestedPairs?: SuggestedPair[];
 }
 
+/** 类别标注覆盖（键 → 显示标签）。新增类别若已为中文则可省略。 */
 const CATEGORY_LABELS: Record<string, string> = {
-  talent: "天赋专属",
-  resonance: "元素共鸣",
-  weapon: "武器适配",
-  element: "元素关联",
-  nation: "国家关联",
-  synergy: "效果协同",
-  general: "通用互补",
+  synergy: "卡牌引用", // 向后兼容旧数据中的英文键
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  talent: "#ff6b6b",
-  resonance: "#ffa94d",
-  weapon: "#69db7c",
-  element: "#74c0fc",
-  nation: "#b197fc",
   synergy: "#f06595",
-  general: "#868e96",
+  // 结构化分析类别
+  "天赋": "#ff6b6b",
+  "元素共鸣": "#f08c4e",
+  "元素幻变": "#e599f7",
+  "武器": "#69db7c",
+  "元素": "#4dabf7",
+  "伙伴": "#74c0fc",
+  "场地": "#63e6be",
+  "圣遗物": "#ffe066",
+  "料理": "#ffa94d",
+  "特技": "#da77f2",
+  "道具": "#a9e34b",
+  "装备": "#748ffc",
+  // 实体标签匹配类别
+  "准备技能": "#e85d75",
+  "夜魂": "#9775fa",
+  "下落攻击": "#f783ac",
+  "冒险": "#f08c4e",
+  // 文本匹配类别
+  "重击": "#f783ac",
+  "普通攻击": "#63e6be",
+  "元素战技": "#4dabf7",
+  "治疗": "#38d9a9",
+  "生命之契": "#ff8787",
+  "随机": "#ffa94d",
+  "召唤": "#74c0fc",
+  "舍弃": "#ff6b6b",
+  "元素爆发/充能": "#ffd43b",
+  "赋予": "#51cf66",
+  "快速行动": "#20c997",
+  "切换角色": "#339af0",
+  "抓牌": "#fcc419",
 };
 
 interface WeightSliderProps {
@@ -106,8 +128,18 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   // 批量调节：当前拖拽值
   const [batchValue, setBatchValue] = createSignal(0.5);
 
+  /** 保存并恢复 editor-content 的滚动位置 */
+  const preserveScroll = (fn: () => void) => {
+    const el = document.querySelector(".editor-content") as HTMLElement | null;
+    if (!el) { fn(); return; }
+    const top = el.scrollTop;
+    fn();
+    el.scrollTop = Math.min(top, el.scrollHeight - el.clientHeight);
+  };
+
   // 创建带持久化的管理器（构造时自动从 configStore 加载，写操作自动持久化）
   const manager = configStore.createCardWeightManager();
+  const { confirm: clearConfirm, Modal: ClearModal } = createConfirm();
 
   /** 修改权重（自动持久化） */
   const saveWeight = (a: number, b: number, weight: number) => {
@@ -115,13 +147,16 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   };
 
   const sortedCards = createMemo(() => {
-    const actions = [...props.cardPool]
+    const all = [...props.cardPool]
       .sort((a, b) => a.cardId - b.cardId)
       .map((c) => ({ id: c.cardId, name: c.name }));
+    // 天赋牌（2xxxxx）排到最后
+    const regular = all.filter(c => c.id >= 300000);
+    const talents = all.filter(c => c.id < 300000);
     const chars = (props.characterPool ?? [])
       .sort((a, b) => a.id - b.id)
       .map((c) => ({ id: c.id, name: c.name }));
-    return [...actions, ...chars];
+    return [...regular, ...chars, ...talents];
   });
 
   /** 单次获取所有手动对（依赖 configStore 信号触发重读） */
@@ -228,12 +263,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
   /** 批量调节：实时预览（自动持久化） */
   const applyBatchPreview = (value: number) => {
-    const sel = selectedCards();
-    manager.beginBatch();
-    for (const r of relatedCards()) {
-      if (sel.has(r.id)) manager.setCardWeight(mainCard(), r.id, value);
-    }
-    manager.endBatch();
+    preserveScroll(() => {
+      const sel = selectedCards();
+      manager.beginBatch();
+      for (const r of relatedCards()) {
+        if (sel.has(r.id)) manager.setCardWeight(mainCard(), r.id, value);
+      }
+      manager.endBatch();
+    });
   };
 
   /** 切换多选状态 */
@@ -273,11 +310,13 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
 
   /** 撤销批量调节 */
   const rejectBatch = () => {
-    const orig = batchOriginals();
-    manager.beginBatch();
-    for (const [id, weight] of orig) manager.setCardWeight(mainCard(), id, weight);
-    manager.endBatch();
-    exitMultiSelect();
+    preserveScroll(() => {
+      const orig = batchOriginals();
+      manager.beginBatch();
+      for (const [id, weight] of orig) manager.setCardWeight(mainCard(), id, weight);
+      manager.endBatch();
+      exitMultiSelect();
+    });
   };
 
   /** 退出多选模式 */
@@ -320,17 +359,19 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   });
 
   const removeRelation = (cardId: number) => {
-    saveWeight(mainCard(), cardId, 0);
+    preserveScroll(() => saveWeight(mainCard(), cardId, 0));
   };
 
   const acceptSuggestion = (pair: SuggestedPair) => {
-    manager.setCardWeight(pair.a, pair.b, effectiveWeight(pair));
+    preserveScroll(() => manager.setCardWeight(pair.a, pair.b, effectiveWeight(pair)));
   };
 
   const dismissSuggestion = (pair: SuggestedPair) => {
-    const d = new Set(configStore.dismissed());
-    d.add(pairKey(pair.a, pair.b));
-    configStore.setDismissed([...d]);
+    preserveScroll(() => {
+      const d = new Set(configStore.dismissed());
+      d.add(pairKey(pair.a, pair.b));
+      configStore.setDismissed([...d]);
+    });
   };
 
   const updateCategoryWeight = (category: string, weight: number) => {
@@ -340,11 +381,44 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
   };
 
   const acceptCategory = (category: string) => {
-    const pairs = groupedSuggestions()[category] ?? [];
-    const w = configStore.categoryWeights()[category] ?? pairs[0]?.weight ?? 0.5;
-    manager.beginBatch();
-    for (const p of pairs) manager.setCardWeight(p.a, p.b, w);
-    manager.endBatch();
+    preserveScroll(() => {
+      const pairs = groupedSuggestions()[category] ?? [];
+      const w = configStore.categoryWeights()[category] ?? pairs[0]?.weight ?? 0.5;
+      manager.beginBatch();
+      for (const p of pairs) manager.setCardWeight(p.a, p.b, w);
+      manager.endBatch();
+    });
+  };
+
+  const dismissCategory = (category: string) => {
+    preserveScroll(() => {
+      const pairs = groupedSuggestions()[category] ?? [];
+      const d = new Set(configStore.dismissed());
+      for (const p of pairs) d.add(pairKey(p.a, p.b));
+      configStore.setDismissed([...d]);
+    });
+  };
+
+  const handleClear = async () => {
+    if (await clearConfirm("确定要清空所有权重的配置吗？此操作不可撤销。")) {
+      preserveScroll(() => {
+        manager.loadPairs([]);
+        configStore.setDismissed([]);
+      });
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const count = selectedCards().size;
+    if (!await clearConfirm(`确定要删除选中的 ${count} 张卡牌关联吗？此操作不可撤销。`)) return;
+    preserveScroll(() => {
+      manager.beginBatch();
+      for (const id of selectedCards()) {
+        manager.setCardWeight(mainCard(), id, 0);
+      }
+      manager.endBatch();
+      exitMultiSelect();
+    });
   };
 
   return (
@@ -357,9 +431,13 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
           onImport={(config: { version?: number; pairs?: any[] }) => {
             if (config.pairs && Array.isArray(config.pairs)) manager.loadPairs(config.pairs);
           }}
-          onReset={() => manager.resetToDefault()}
+          onReset={() => {
+            configStore.resetCardWeights();
+            manager.loadPairs(configStore.getCardWeights().pairs);
+          }}
         >
-          <span class="editor-autosave-hint">✓ 自动保存</span>
+          <AutosaveHint />
+          <button class="editor-btn editor-btn-save" onClick={handleClear} style={{ "background": "var(--color-danger-bg)", "border-color": "var(--color-danger-border)", "color": "var(--color-danger)" }}>清空</button>
         </EditorToolbar>
 
         <Show when={mainCard() !== 0}>
@@ -419,36 +497,42 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
         </For>
       </div>
 
+      {/* 操作栏 sticky：多选（上） + 批量调节（下） */}
       <Show when={mainCard() !== 0 && relatedCards().length > 0}>
-        {/* 多选工具栏 */}
-        <div class="pve-weight-toolbar">
-          <Show when={!multiSelectMode()}>
-            <button onClick={enterMultiSelect} class="btn-sm pve-weight-toolbar-btn">☑ 多选</button>
-          </Show>
-          <Show when={multiSelectMode()}>
-            <button onClick={toggleSelectAll} class="btn-sm pve-weight-toolbar-btn">
-              {selectedCards().size === relatedCards().length ? "取消全选" : "全选"}
-            </button>
-            <button onClick={exitMultiSelect} class="btn-sm pve-weight-toolbar-btn">取消多选</button>
+        <div class="pve-weight-sticky-bar">
+          {/* 第一行：多选控制 + 删除 */}
+          <div class="pve-weight-sticky-bar-row">
+            <div class="pve-weight-sticky-bar-left">
+              <Show when={!multiSelectMode()}>
+                <button onClick={enterMultiSelect} class="btn-sm">☑ 多选</button>
+              </Show>
+              <Show when={multiSelectMode()}>
+                <button onClick={toggleSelectAll} class="btn-sm">
+                  {selectedCards().size === relatedCards().length ? "取消全选" : "全选"}
+                </button>
+                <button onClick={rejectBatch} class="btn-sm">取消多选</button>
+              </Show>
+            </div>
+            <Show when={multiSelectMode() && selectedCards().size > 0}>
+              <button onClick={handleDeleteSelected} class="btn-sm btn-sm-red">🗑 删除选中（{selectedCards().size}）</button>
+            </Show>
+          </div>
+          {/* 第二行：批量调节滑块 */}
+          <Show when={multiSelectMode() && selectedCards().size > 0}>
+            <div class="pve-weight-sticky-bar-row">
+              <span class="pve-weight-batch-label">批量调节（{selectedCards().size} 张）</span>
+              <WeightSlider
+                value={batchValue()}
+                onInput={(raw) => setBatchValue(raw)}
+                onChange={(snapped) => {
+                  setBatchValue(snapped);
+                  applyBatchPreview(snapped);
+                }}
+              />
+              <button onClick={acceptBatch} class="btn-sm btn-sm-green">✓ 确认</button>
+            </div>
           </Show>
         </div>
-
-        {/* 批量调节滑块 */}
-        <Show when={multiSelectMode() && selectedCards().size > 0}>
-          <div class="pve-weight-batch-bar">
-            <span class="pve-weight-batch-label">批量调节（{selectedCards().size} 张）</span>
-            <WeightSlider
-              value={batchValue()}
-              onInput={(raw) => setBatchValue(raw)}
-              onChange={(snapped) => {
-                setBatchValue(snapped);
-                applyBatchPreview(snapped);
-              }}
-            />
-            <button onClick={acceptBatch} class="btn-sm btn-sm-green pve-weight-batch-accept">✓</button>
-            <button onClick={rejectBatch} class="btn-sm btn-sm-red pve-weight-batch-reject">✕</button>
-          </div>
-        </Show>
 
         <div class="pve-weight-rel-list"
           onPointerDown={listDrag.onPointerDown}
@@ -484,7 +568,19 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     updateWeight(rel.id, snapped);
                   }}
                 />
-                <button onClick={() => removeRelation(rel.id)} onPointerDown={(e) => e.stopPropagation()} class="btn-sm btn-sm-red pve-weight-remove">✕</button>
+                <Show when={rel.source === "suggested" && rel.pair}>
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); acceptSuggestion(rel.pair!); }}
+                    class="btn-sm btn-sm-green pve-weight-accept" title="采纳推荐">✓</button>
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); dismissSuggestion(rel.pair!); }}
+                    class="btn-sm pve-weight-dismiss" title="忽略">✕</button>
+                </Show>
+                <Show when={rel.source !== "suggested"}>
+                  <button onClick={() => removeRelation(rel.id)} onPointerDown={(e) => e.stopPropagation()} class="btn-sm btn-sm-red pve-weight-remove">✕</button>
+                </Show>
               </div>
             )}
           </For>
@@ -518,7 +614,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                   sliderStyle="80px"
                   onClick={(e: MouseEvent) => e.stopPropagation()}
                 />
-                <button onClick={(e) => { e.stopPropagation(); acceptCategory(category); }} class="btn-sm btn-sm-green pve-weight-accept-all">全部采纳</button>
+                <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); acceptCategory(category); }}
+                    class="btn-sm btn-sm-green pve-weight-accept-all">全部采纳</button>
+                <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); dismissCategory(category); }}
+                    class="btn-sm pve-weight-dismiss-all" title="全部忽略">全部忽略</button>
               </div>
               <div class="pve-weight-suggest-list">
                 {pairs.slice(0, 20).map((pair) => (
@@ -526,8 +629,14 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
                     <span class="pve-weight-suggest-names">{getCardName(pair.a)} ↔ {getCardName(pair.b)}</span>
                     <span class="pve-weight-suggest-weight">{effectiveWeight(pair).toFixed(1)}</span>
                     <span class="pve-weight-suggest-reason">{pair.reason}</span>
-                    <button onClick={(e) => { e.stopPropagation(); acceptSuggestion(pair); }} class="btn-sm btn-sm-green pve-weight-accept">✓</button>
-                    <button onClick={(e) => { e.stopPropagation(); dismissSuggestion(pair); }} class="btn-sm pve-weight-dismiss">✕</button>
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); acceptSuggestion(pair); }}
+                        class="btn-sm btn-sm-green pve-weight-accept">✓</button>
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); dismissSuggestion(pair); }}
+                        class="btn-sm pve-weight-dismiss">✕</button>
                   </div>
                 ))}
                 {pairs.length > 20 && <div class="pve-weight-suggest-more">...还有 {pairs.length - 20} 对</div>}
@@ -537,6 +646,7 @@ export function CardWeightEditor(props: CardWeightEditorProps) {
           })}
         </div>
       </Show>
+      <ClearModal />
     </div>
   );
 }

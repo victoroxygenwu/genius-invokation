@@ -107,7 +107,7 @@ function EncounterEditor(p: {
                 <span class="le-encounter-mod-badge">✨{cfg.modifiers.length}</span>
               </Show>
               <button class="editor-btn-icon editor-btn-icon-blue" title="编辑敌人" onClick={() => p.onEditEnemy(i())}>✏️</button>
-              <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => removeEnemy(i())}>✕</button>
+              <button class="editor-btn-icon editor-btn-icon-danger" onPointerDown={(e) => e.stopPropagation()} onClick={() => removeEnemy(i())}>✕</button>
             </div>
           </Show>
         )}</For>
@@ -116,7 +116,7 @@ function EncounterEditor(p: {
         <Show when={p.configs.length < 4}>
           <button class="le-encounter-action-add" onClick={addEnemy}>+ 添加敌人</button>
         </Show>
-        <button class="le-encounter-action-delete" onClick={p.onRemove}>删除遭遇</button>
+        <button class="le-encounter-action-delete" onPointerDown={(e) => e.stopPropagation()} onClick={p.onRemove}>删除遭遇</button>
       </div>
       <Show when={p.configs.some((c) => c.characterId === 0)}>
         <div class="le-encounter-pick-hint">点击上方卡片选择敌人</div>
@@ -168,7 +168,7 @@ function FloorRow(p: {
     <div class="le-floor">
       <div class="le-floor-header">
         <span class="le-floor-label">第 {p.cfg.floor} 层</span>
-        <Show when={p.canRemove}><button class="ee-btn-delete" onClick={p.onRemove} style={{ position: "static" }}>删除层</button></Show>
+        <Show when={p.canRemove}><button class="ee-btn-delete" onPointerDown={(e) => e.stopPropagation()} onClick={p.onRemove} style={{ position: "static" }}>删除层</button></Show>
       </div>
       <div class="le-floor-nodes">
         <For each={p.cfg.path}>{(node, ni) => {
@@ -179,7 +179,7 @@ function FloorRow(p: {
               <div class="le-node-header">
                 <span class="le-node-type">{NODE_INFO[node.type].icon} {NODE_INFO[node.type].name}</span>
                 <Show when={!isNodeFixed(ni())}>
-                  <button class="ee-btn-delete" onClick={() => p.onUpdate({ ...p.cfg, path: p.cfg.path.filter((_, i) => i !== ni()) })} style={{ position: "static" }}>✕</button>
+                  <button class="ee-btn-delete" onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onUpdate({ ...p.cfg, path: p.cfg.path.filter((_, i) => i !== ni()) })} style={{ position: "static" }}>✕</button>
                 </Show>
                 <Show when={isNodeFixed(ni())}>
                   <span class="le-node-fixed-hint">🔒 固定</span>

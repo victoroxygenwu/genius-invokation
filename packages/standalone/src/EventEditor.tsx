@@ -3,14 +3,17 @@ import getRoguelikeData from "@gi-tcg/roguelike-data";
 import { CURRENT_VERSION } from "@gi-tcg/core";
 import {
   DEFAULT_EVENTS, generateCharacterPool, CARD_TAG_LABELS,
-  CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS,
   type EventDefinition, type EventCondition, type EventConditionType,
-  type EventEffectType, type CardEntry, type FieldDescriptor,
+  type EventEffectType, type CardEntry,
 } from "@gi-tcg/roguelike";
+import {
+  CONDITION_DESCRIPTORS, EFFECT_DESCRIPTORS,
+  type FieldDescriptor,
+} from "./event-descriptors";
 import { getCardName } from "./roguelike-assets";
 import { configStore } from "./configStore";
 import { OverlayPanel } from "./OverlayPanel";
-import { EditorToolbar } from "./EditorToolbar";
+import { EditorToolbar, AutosaveHint } from "./EditorToolbar";
 import { NumberInput } from "./NumberInput";
 import { useEditableList } from "./useEditableList";
 import { useAutoSave } from "./useAutoSave";
@@ -168,7 +171,7 @@ function ConditionRow(p: {
       <NumberInput value={p.condition.weight} min={1} max={100}
         onChange={(v) => p.onUpdate(p.index, { ...p.condition, weight: v })} />
 
-      <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => p.onRemove(p.index)}>✕</button>
+      <button class="editor-btn-icon editor-btn-icon-danger" onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onRemove(p.index)}>✕</button>
     </div>
   );
 }
@@ -207,7 +210,7 @@ function EffectRow(p: {
           onChange={(v) => updateField(field.key, v)} />
       )}</For>
 
-      <button class="editor-btn-icon editor-btn-icon-danger" onClick={() => p.onRemove(p.index)}>✕</button>
+      <button class="editor-btn-icon editor-btn-icon-danger" onPointerDown={(e) => e.stopPropagation()} onClick={() => p.onRemove(p.index)}>✕</button>
     </div>
   );
 }
@@ -253,7 +256,7 @@ function EventCard(p: {
               <button class="ee-btn-test" onClick={p.onTest}>▶ 测试</button>
             </Show>
             <Show when={p.onDelete}>
-              <button class="ee-btn-test ee-btn-delete-sm" onClick={p.onDelete}>删除</button>
+              <button class="ee-btn-test ee-btn-delete-sm" onPointerDown={(e) => e.stopPropagation()} onClick={p.onDelete}>删除</button>
             </Show>
           </div>
           <div class="ee-fields">
@@ -395,9 +398,9 @@ export function EventEditor(p: EventEditorProps) {
           filename="event-config.json"
           getData={events}
           onImport={(d: EventDefinition[]) => setEventsLocal(d)}
-          onReset={() => { setEventsLocal(structuredClone(DEFAULT_EVENTS)); }}
+          onReset={() => { const defaults = structuredClone(DEFAULT_EVENTS); configStore.setEvents(defaults); setEventsLocal(defaults); }}
         >
-          <span class="editor-autosave-hint">✓ 自动保存</span>
+          <AutosaveHint />
         </EditorToolbar>
       }
     >

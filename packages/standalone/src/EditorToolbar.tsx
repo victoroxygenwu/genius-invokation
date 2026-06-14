@@ -22,6 +22,11 @@ import { createToast } from "./createToast";
 // 统一编辑器工具栏
 // ============================================================
 
+/** 统一的"自动保存"提示文字 */
+export function AutosaveHint() {
+  return <span class="editor-autosave-hint">✓ 自动保存</span>;
+}
+
 export interface EditorToolbarProps<T> {
   /** 导出文件名 */
   filename: string;
